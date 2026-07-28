@@ -44,6 +44,7 @@ export type GameTab =
   | "egitim"
   | "mulk"
   | "sosyal"
+  | "yasam"
   | "basarim";
 
 export interface PersonalityTraits {
@@ -89,6 +90,8 @@ export interface Character {
   gozRengi?: string;
   tenRengi?: string;
   zorluk?: string;
+  boyPotansiyeli?: number;
+  genetikOzet?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -229,6 +232,15 @@ export interface GameNotification {
   tip: "bilgi" | "basarim" | "uyari";
 }
 
+export interface JournalEntry {
+  id: string;
+  yil: number;
+  yas: number;
+  baslik: string;
+  metin: string;
+  kategori: string;
+}
+
 export interface SavedGameState {
   life: Life;
   player: Character;
@@ -241,4 +253,15 @@ export interface SavedGameState {
   loans: Loan[];
   achievements: Achievement[];
   decorations?: string[];
+  journal?: JournalEntry[];
+  neighborhood?: import("@/lib/systems/neighborhood").NeighborhoodState;
+  school?: import("@/lib/systems/school").SchoolState | null;
+  crime?: import("@/lib/systems/crime").CrimeState;
+  politics?: import("@/lib/systems/politics").PoliticsState;
+  religion?: import("@/lib/systems/religion").ReligionState;
+  hobbies?: import("@/lib/systems/hobbies").Hobby[];
+  genetics?: import("@/lib/systems/genetics").GeneticsProfile | null;
+  actionCooldowns?: import("@/lib/systems/relationships").ActionCooldown[];
+  lifetimeScore?: number;
+  aileDurumu?: string;
 }

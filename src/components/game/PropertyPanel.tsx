@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { useGameStore, VEHICLE_TYPES } from "@/store/game-store";
 import { formatMoney } from "@/lib/generators";
 import { DECORATION_CATALOG, DECORATION_CATEGORY_LABELS } from "@/lib/systems/decoration";
+import { canBuyHome, canBuyVehicle, getAgeBlockedMessage } from "@/lib/systems/age-gates";
 import { Home, Car, Paintbrush } from "lucide-react";
 
 const HOMES = [
@@ -16,7 +17,9 @@ const HOMES = [
 ];
 
 export function PropertyPanel() {
-  const { properties, decorations, buyProperty, buyDecoration } = useGameStore();
+  const { properties, decorations, buyProperty, buyDecoration, player } = useGameStore();
+
+  if (!player) return null;
 
   return (
     <div className="space-y-4">
@@ -25,32 +28,36 @@ export function PropertyPanel() {
           <Home size={20} className="text-accent" />
           <h3 className="font-display text-lg font-semibold text-content">Evler</h3>
         </div>
-        <div className="space-y-2">
-          {HOMES.map((home) => (
-            <div key={home.ad} className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-4 py-3">
-              <div>
-                <p className="font-medium text-content">{home.ad}</p>
-                <p className="text-xs text-content-muted">{formatMoney(home.deger)}</p>
+        {!canBuyHome(player.yas) ? (
+          <p className="text-sm text-content-muted">{getAgeBlockedMessage(player.yas, "ev")}</p>
+        ) : (
+          <div className="space-y-2">
+            {HOMES.map((home) => (
+              <div key={home.ad} className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-4 py-3">
+                <div>
+                  <p className="font-medium text-content">{home.ad}</p>
+                  <p className="text-xs text-content-muted">{formatMoney(home.deger)}</p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    buyProperty({
+                      tip: "ev",
+                      ad: home.ad,
+                      deger: home.deger,
+                      kira: home.kira,
+                      satinAlindi: true,
+                      detaylar: {},
+                    })
+                  }
+                >
+                  Satın Al
+                </Button>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  buyProperty({
-                    tip: "ev",
-                    ad: home.ad,
-                    deger: home.deger,
-                    kira: home.kira,
-                    satinAlindi: true,
-                    detaylar: {},
-                  })
-                }
-              >
-                Satın Al
-              </Button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card variant="glass" padding="md">
@@ -59,7 +66,7 @@ export function PropertyPanel() {
           <h3 className="font-display text-lg font-semibold text-content">Araçlar</h3>
         </div>
         <div className="space-y-2">
-          {VEHICLE_TYPES.map((v) => {
+          {VEHICLE_TYPES.filter((v) => canBuyVehicle(player.yas, v.tip)).map((v) => {
             const fiyat = Math.round((v.minFiyat + v.maxFiyat) / 2);
             return (
               <div key={v.tip} className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-4 py-3">
@@ -87,6 +94,9 @@ export function PropertyPanel() {
               </div>
             );
           })}
+          {VEHICLE_TYPES.filter((v) => !canBuyVehicle(player.yas, v.tip)).length > 0 && (
+            <p className="text-xs text-content-muted">Bazı araçlar yaşa göre kilitli (bisiklet 8+, moto 16+, araba 18+).</p>
+          )}
         </div>
       </Card>
 
@@ -95,43 +105,47 @@ export function PropertyPanel() {
           <Paintbrush size={20} className="text-accent" />
           <h3 className="font-display text-lg font-semibold text-content">Ev Dekorasyonu</h3>
         </div>
-        {(Object.keys(DECORATION_CATEGORY_LABELS) as Array<keyof typeof DECORATION_CATEGORY_LABELS>).map(
-          (kategori) => {
-            const items = DECORATION_CATALOG.filter((d) => d.kategori === kategori);
-            return (
-              <div key={kategori} className="mb-4 last:mb-0">
-                <p className="text-xs font-medium text-content-muted uppercase tracking-wide mb-2">
-                  {DECORATION_CATEGORY_LABELS[kategori]}
-                </p>
-                <div className="space-y-2">
-                  {items.map((item) => {
-                    const owned = decorations.includes(item.id);
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-4 py-3"
-                      >
-                        <div>
-                          <p className="font-medium text-content">{item.ad}</p>
-                          <p className="text-xs text-content-muted">
-                            {formatMoney(item.fiyat)} · +{item.mutluluk} mutluluk
-                          </p>
-                        </div>
-                        <Button
-                          variant={owned ? "ghost" : "secondary"}
-                          size="sm"
-                          disabled={owned}
-                          onClick={() => buyDecoration(item.id)}
+        {player.yas < 16 ? (
+          <p className="text-sm text-content-muted">Dekorasyon için en az 16 yaşında olmalısın.</p>
+        ) : (
+          (Object.keys(DECORATION_CATEGORY_LABELS) as Array<keyof typeof DECORATION_CATEGORY_LABELS>).map(
+            (kategori) => {
+              const items = DECORATION_CATALOG.filter((d) => d.kategori === kategori);
+              return (
+                <div key={kategori} className="mb-4 last:mb-0">
+                  <p className="text-xs font-medium text-content-muted uppercase tracking-wide mb-2">
+                    {DECORATION_CATEGORY_LABELS[kategori]}
+                  </p>
+                  <div className="space-y-2">
+                    {items.map((item) => {
+                      const owned = decorations.includes(item.id);
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-4 py-3"
                         >
-                          {owned ? "Sahip" : "Satın Al"}
-                        </Button>
-                      </div>
-                    );
-                  })}
+                          <div>
+                            <p className="font-medium text-content">{item.ad}</p>
+                            <p className="text-xs text-content-muted">
+                              {formatMoney(item.fiyat)} · +{item.mutluluk} mutluluk
+                            </p>
+                          </div>
+                          <Button
+                            variant={owned ? "ghost" : "secondary"}
+                            size="sm"
+                            disabled={owned}
+                            onClick={() => buyDecoration(item.id)}
+                          >
+                            {owned ? "Sahip" : "Satın Al"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          }
+              );
+            }
+          )
         )}
       </Card>
 

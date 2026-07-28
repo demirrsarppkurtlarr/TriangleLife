@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { TriangleLogo } from "@/components/ui/TriangleLogo";
 import { useGameStore } from "@/store/game-store";
-import { hasLocalSave } from "@/lib/local-storage";
+import { hasLocalSave, listSaveSlots, setActiveSlot } from "@/lib/local-storage";
 import { TURKISH_NAMES, TURKISH_SURNAMES, CITIES } from "@/lib/constants";
 import type { CharacterCreationOptions, FamilyWealth, PersonalityFocus, CharacterDifficulty, HairColor, EyeColor, SkinTone } from "@/types/creation";
 import {
@@ -59,6 +59,7 @@ export function NewLifeScreen() {
   const startNewLife = useGameStore((s) => s.startNewLife);
   const loadLocalGame = useGameStore((s) => s.loadLocalGame);
   const [hasSave, setHasSave] = useState(false);
+  const [slots, setSlots] = useState(() => listSaveSlots());
   const [step, setStep] = useState(0);
 
   const [cinsiyet, setCinsiyet] = useState<Gender>("erkek");
@@ -76,6 +77,7 @@ export function NewLifeScreen() {
 
   useEffect(() => {
     setHasSave(hasLocalSave());
+    setSlots(listSaveSlots());
   }, []);
 
   const nameSuggestions = useMemo(() => TURKISH_NAMES[cinsiyet].slice(0, 8), [cinsiyet]);
@@ -136,12 +138,40 @@ export function NewLifeScreen() {
           </p>
         </div>
 
-        {hasSave && (
-          <Button onClick={() => loadLocalGame()} fullWidth size="lg" className="gap-2 rounded-full">
-            <Play size={18} />
-            Kayıtlı Oyuna Devam Et
-          </Button>
-        )}
+        <div className="space-y-2">
+          {slots.map((s) => (
+            <div
+              key={s.slot}
+              className="flex items-center justify-between gap-2 rounded-2xl border border-border-subtle/60 bg-surface-overlay/30 px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-content">Kayıt {s.slot + 1}</p>
+                <p className="text-xs text-content-muted truncate">
+                  {s.occupied ? s.preview : "Boş slot"}
+                </p>
+              </div>
+              {s.occupied && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="rounded-full shrink-0"
+                  onClick={() => {
+                    setActiveSlot(s.slot);
+                    loadLocalGame(s.slot);
+                  }}
+                >
+                  Yükle
+                </Button>
+              )}
+            </div>
+          ))}
+          {hasSave && (
+            <Button onClick={() => loadLocalGame()} fullWidth size="lg" className="gap-2 rounded-full">
+              <Play size={18} />
+              Son kayda devam et
+            </Button>
+          )}
+        </div>
 
         <Card variant="elevated" padding="lg" className="rounded-[1.75rem]">
           {/* Step indicators */}

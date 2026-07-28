@@ -51,6 +51,9 @@ export function useKeyboardShortcuts() {
           setActiveTab("sosyal");
           break;
         case "8":
+          setActiveTab("yasam");
+          break;
+        case "9":
           setActiveTab("basarim");
           break;
       }

@@ -41,7 +41,7 @@ export function EducationPanel() {
         )}
       </Card>
 
-      {player.yas >= 16 && (
+      {player.yas >= 15 && (
         <Card variant="glass" padding="md">
           <div className="flex items-center gap-2 mb-4">
             <Briefcase size={20} className="text-accent" />

@@ -27,9 +27,9 @@ export const WEALTH_LABELS: Record<FamilyWealth, string> = {
 };
 
 export const WEALTH_STARTING_MONEY: Record<FamilyWealth, number> = {
-  dar: 0,
-  orta: 500,
-  varlikli: 5000,
+  dar: 40000,
+  orta: 180000,
+  varlikli: 750000,
 };
 
 export const DIFFICULTY_LABELS: Record<CharacterDifficulty, string> = {

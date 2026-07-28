@@ -1,250 +1,352 @@
 import type { AgeGroup, EventCategory, EventChoice, GameEvent } from "@/types/game";
 
-type Template = {
+type StoryTemplate = {
   kategori: EventCategory;
   yasGrubu: AgeGroup[];
   oncelik: number;
-  basliklar: string[];
-  aciklamalar: string[];
-  secenekler: EventChoice[];
+  scenes: Array<{
+    baslik: string;
+    aciklama: string;
+    secenekler: EventChoice[];
+  }>;
 };
 
-const ALL_AGES: AgeGroup[] = [
-  "bebek", "cocuk", "ilkokul", "ergen", "genc", "yetiskin", "orta_yas", "yasli", "ileri_yas",
-];
-
-const CHILD_AGES: AgeGroup[] = ["cocuk", "ilkokul"];
-const TEEN_AGES: AgeGroup[] = ["ergen", "genc"];
-const ADULT_AGES: AgeGroup[] = ["genc", "yetiskin", "orta_yas"];
-const SENIOR_AGES: AgeGroup[] = ["orta_yas", "yasli", "ileri_yas"];
-
-const templates: Template[] = [
+const stories: StoryTemplate[] = [
   {
     kategori: "aile",
-    yasGrubu: ALL_AGES.filter((a) => a !== "bebek"),
-    oncelik: 40,
-    basliklar: [
-      "Aile Toplantısı", "Akşam Yemeği", "Aile Tartışması", "Akraba Ziyareti",
-      "Bayram Kutlaması", "Aile Fotoğrafı", "Ev İşleri", "Aile Sırrı",
-      "Kardeş Kıskançlığı", "Anne-Baba Konuşması", "Aile Tatili Planı", "Mirasa Dair Sohbet",
+    yasGrubu: ["bebek"],
+    oncelik: 70,
+    scenes: [
+      {
+        baslik: "Gece Ağlaması",
+        aciklama: "Gece yarısı uyanıyorsun. Karnın acıkmış olabilir. Annen yorgun gözlerle yanına geliyor.",
+        secenekler: [
+          { id: "s1", metin: "Sakinleşene kadar ağla", sonuc: "Annen seni emzirip uyuttu. Sabah herkes yorgun.", etkiler: [{ tip: "mutluluk", deger: 2 }] },
+          { id: "s2", metin: "Kucağa alınınca sus", sonuc: "Annenin kokusuyla çabuk sakinleştin.", etkiler: [{ tip: "mutluluk", deger: 4 }] },
+        ],
+      },
+      {
+        baslik: "İlk Aşı",
+        aciklama: "Sağlık ocağında aşı sırası sende. İğneyi görünce geriliyorsun; hemşire gülümseyerek yaklaşıyor.",
+        secenekler: [
+          { id: "s1", metin: "Ağlayarak tepki ver", sonuc: "Aşı yapıldı. Bir süre huysuzlandın ama sağlığın korundu.", etkiler: [{ tip: "saglik", deger: 5 }, { tip: "stres", deger: 3 }] },
+          { id: "s2", metin: "Oyuncakla dikkatini dağıt", sonuc: "Aşı hızlı geçti. Eve dönünce rahatladın.", etkiler: [{ tip: "saglik", deger: 5 }] },
+        ],
+      },
     ],
-    aciklamalar: [
-      "Ailenle önemli bir konu konuşulacak.",
-      "Evde duygusal bir atmosfer var.",
-      "Bir aile üyesi seninle konuşmak istiyor.",
-      "Aile içinde yeni bir gelişme yaşandı.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Yapıcı ol", sonuc: "İlişkilerin güçlendi.", etkiler: [{ tip: "mutluluk", deger: 6 }, { tip: "ozellik", deger: 3, ozellik: "empati" }] },
-      { id: "s2", metin: "Sessiz kal", sonuc: "Ortam gergin kaldı.", etkiler: [{ tip: "stres", deger: 4 }] },
-      { id: "s3", metin: "Tartışmaya gir", sonuc: "Kısa süreli bir gerginlik yaşandı.", etkiler: [{ tip: "stres", deger: 8 }, { tip: "mutluluk", deger: -4 }] },
+  },
+  {
+    kategori: "aile",
+    yasGrubu: ["cocuk"],
+    oncelik: 55,
+    scenes: [
+      {
+        baslik: "Kreşte Paylaşım",
+        aciklama: "En sevdiğin oyuncağı başka bir çocuk istiyor. Öğretmen ikinizi de izliyor.",
+        secenekler: [
+          { id: "s1", metin: "Sırayla oynamayı kabul et", sonuc: "Öğretmen seni övdü. Yeni bir arkadaşlık filizlendi.", etkiler: [{ tip: "ozellik", deger: 4, ozellik: "empati" }, { tip: "mutluluk", deger: 3 }] },
+          { id: "s2", metin: "Oyuncağı bırakma", sonuc: "Kısa bir tartışma oldu. Öğretmen araya girdi.", etkiler: [{ tip: "stres", deger: 4 }, { tip: "ozellik", deger: -2, ozellik: "sosyallik" }] },
+        ],
+      },
+      {
+        baslik: "Diş Fırçalama Direnci",
+        aciklama: "Baban dişlerini fırçalamanı istiyor ama sen uykulu ve isteksizsin.",
+        secenekler: [
+          { id: "s1", metin: "Fırçala ve yat", sonuc: "Alışkanlık kazanıyorsun. Baban memnun.", etkiler: [{ tip: "saglik", deger: 3 }] },
+          { id: "s2", metin: "Ağlayıp ertele", sonuc: "Biraz tartıştınız. Sonunda fırçaladın ama gergin uyudun.", etkiler: [{ tip: "stres", deger: 3 }] },
+        ],
+      },
     ],
   },
   {
     kategori: "egitim",
-    yasGrubu: ["ilkokul", "ergen", "genc"],
-    oncelik: 45,
-    basliklar: [
-      "Sınav Haftası", "Ödev Krizi", "Öğretmen Notu", "Kütüphane Günü",
-      "Proje Sunumu", "Burs Başvurusu", "Ders Kulübü", "Sınıf Başkanlığı",
-      "Yabancı Dil Kursu", "Online Ders", "Grup Çalışması", "Not Ortalaması",
-    ],
-    aciklamalar: [
-      "Eğitim hayatında kritik bir an.",
-      "Okulda yeni bir fırsat doğdu.",
-      "Derslerin seni zorluyor.",
-      "Akademik bir karar vermen gerekiyor.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Çok çalış", sonuc: "Bilgin arttı.", etkiler: [{ tip: "ozellik", deger: 6, ozellik: "zeka" }, { tip: "stres", deger: 5 }] },
-      { id: "s2", metin: "Dengeli ilerle", sonuc: "Makul bir ilerleme kaydettin.", etkiler: [{ tip: "ozellik", deger: 3, ozellik: "zeka" }] },
-      { id: "s3", metin: "Ertele", sonuc: "Fırsatı kaçırdın.", etkiler: [{ tip: "stres", deger: 3 }] },
-    ],
-  },
-  {
-    kategori: "kariyer",
-    yasGrubu: ADULT_AGES,
-    oncelik: 50,
-    basliklar: [
-      "İş Görüşmesi", "Ofis Draması", "Yeni Proje", "Müşteri Şikayeti",
-      "Ekip Toplantısı", "Mesai Uzatması", "İş Arkadaşı Yardımı", "Performans Değerlendirmesi",
-      "İş Seyahati", "Yeni Yazılım", "Patronla Konuşma", "Kariyer Fırsatı",
-    ],
-    aciklamalar: [
-      "İş hayatında yeni bir gelişme var.",
-      "Kariyerin için önemli bir seçim anı.",
-      "Ofiste beklenmedik bir durum oluştu.",
-      "Mesleki bir fırsat kapıda.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Profesyonel davran", sonuc: "İtibarın arttı.", etkiler: [{ tip: "ozellik", deger: 5, ozellik: "guven" }, { tip: "para", deger: 1500 }] },
-      { id: "s2", metin: "Risk al", sonuc: "Cesur bir adım attın.", etkiler: [{ tip: "mutluluk", deger: 5 }, { tip: "stres", deger: 6 }] },
-      { id: "s3", metin: "Pas geç", sonuc: "Güvenli tarafta kaldın." },
-    ],
-  },
-  {
-    kategori: "saglik",
-    yasGrubu: ALL_AGES.filter((a) => a !== "bebek"),
-    oncelik: 35,
-    basliklar: [
-      "Kontrol Muayenesi", "Uyku Problemi", "Beslenme Düzeni", "Spor Motivasyonu",
-      "Baş Ağrısı", "Soğuk Algınlığı", "Vitamin Eksikliği", "Göz Yorgunluğu",
-      "Bel Ağrısı", "Stres Belirtileri", "Diş Kontrolü", "Kan Tahlili",
-    ],
-    aciklamalar: [
-      "Sağlığınla ilgili bir durum ortaya çıktı.",
-      "Vücudun dinlenme sinyali veriyor.",
-      "Sağlıklı yaşam için bir karar vermelisin.",
-      "Küçük bir sağlık sorunu belirdi.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Tedavi ol / dikkat et", sonuc: "Sağlığın düzeldi.", etkiler: [{ tip: "saglik", deger: 8 }, { tip: "para", deger: -250 }] },
-      { id: "s2", metin: "Doğal yollarla çöz", sonuc: "Yavaş iyileşme.", etkiler: [{ tip: "saglik", deger: 4 }] },
-      { id: "s3", metin: "Umursama", sonuc: "Durum kötüleşebilir.", etkiler: [{ tip: "saglik", deger: -6 }] },
+    yasGrubu: ["ilkokul"],
+    oncelik: 60,
+    scenes: [
+      {
+        baslik: "Sınıfta Söz Alma",
+        aciklama: "Öğretmen soru soruyor. Cevabı biliyorsun gibi ama emin değilsin. Birkaç el kalkmış durumda.",
+        secenekler: [
+          { id: "s1", metin: "Parmak kaldır ve dene", sonuc: "Cevabın doğru çıktı. Özgüvenin arttı.", etkiler: [{ tip: "ozellik", deger: 4, ozellik: "guven" }, { tip: "ozellik", deger: 2, ozellik: "zeka" }] },
+          { id: "s2", metin: "Sessiz kal, dinle", sonuc: "Başkasının cevabını dinledin. Bir şeyler öğrendin.", etkiler: [{ tip: "ozellik", deger: 2, ozellik: "zeka" }] },
+          { id: "s3", metin: "Yanlış cevap verip utan", sonuc: "Sınıf güldü. Bir süre çekingen kaldın.", etkiler: [{ tip: "stres", deger: 5 }, { tip: "ozellik", deger: -2, ozellik: "guven" }] },
+        ],
+      },
+      {
+        baslik: "Ödev Unutmak",
+        aciklama: "Matematik ödevini evde unuttuğunu derste fark ediyorsun. Öğretmen kontrol ediyor.",
+        secenekler: [
+          { id: "s1", metin: "Dürüstçe söyle", sonuc: "Öğretmen uyarı verdi ama anlayışlıydı. Bir dahaki sefere dikkat edeceksin.", etkiler: [{ tip: "ozellik", deger: 2, ozellik: "guven" }, { tip: "stres", deger: 2 }] },
+          { id: "s2", metin: "Bahane uydur", sonuc: "Yalanın belli oldu. Güven sarsıldı.", etkiler: [{ tip: "stres", deger: 6 }, { tip: "ozellik", deger: -3, ozellik: "guven" }] },
+        ],
+      },
     ],
   },
   {
     kategori: "sosyal",
-    yasGrubu: ["ilkokul", "ergen", "genc", "yetiskin", "orta_yas"],
-    oncelik: 40,
-    basliklar: [
-      "Arkadaş Daveti", "Parti Haberi", "Kulüp Toplantısı", "Komşu Sohbeti",
-      "Online Topluluk", "Yardım Kampanyası", "Sinema Gecesi", "Kahve Buluşması",
-      "Doğum Günü Daveti", "Yeni Tanışma", "Eski Arkadaş", "Mahalle Etkinliği",
+    yasGrubu: ["ergen"],
+    oncelik: 55,
+    scenes: [
+      {
+        baslik: "Arkadaş Baskısı",
+        aciklama: "Arkadaş grubun dersi asıp dışarı çıkmayı öneriyor. Sen kararsızsın; yarın sınavın var.",
+        secenekler: [
+          { id: "s1", metin: "Sınava çalışmayı seç", sonuc: "Arkadaşların bozuldu ama sınavın iyi geçti.", etkiler: [{ tip: "ozellik", deger: 4, ozellik: "zeka" }, { tip: "ozellik", deger: -2, ozellik: "sosyallik" }] },
+          { id: "s2", metin: "Kısa bir tur atıp dön", sonuc: "Dengeyi korudun. Hem nefes aldın hem çalıştın.", etkiler: [{ tip: "mutluluk", deger: 3 }, { tip: "stres", deger: -2 }] },
+          { id: "s3", metin: "Tüm günü dışarıda geçir", sonuc: "Eğlendin ama sınavda zorlandın. Ailen kızgın.", etkiler: [{ tip: "mutluluk", deger: 5 }, { tip: "stres", deger: 8 }, { tip: "ozellik", deger: -3, ozellik: "zeka" }] },
+        ],
+      },
+      {
+        baslik: "İlk Ciddi Tartışma",
+        aciklama: "En yakın arkadaşınla küçük bir yanlış anlaşılma büyüyor. Mesajlar sertleşiyor.",
+        secenekler: [
+          { id: "s1", metin: "Yüz yüze konuşmayı teklif et", sonuc: "Konuşunca mesele çözüldü. İlişkiniz güçlendi.", etkiler: [{ tip: "ozellik", deger: 4, ozellik: "empati" }, { tip: "mutluluk", deger: 4 }] },
+          { id: "s2", metin: "Bir süre mesafeli dur", sonuc: "Soğukluk sürdü. İkiniz de üzgünsünüz.", etkiler: [{ tip: "mutluluk", deger: -4 }, { tip: "stres", deger: 4 }] },
+        ],
+      },
     ],
-    aciklamalar: [
-      "Sosyal bir fırsat kapını çaldı.",
-      "İnsanlarla vakit geçirme şansın var.",
-      "Çevrende yeni bir sosyal olay var.",
-      "Arkadaş çevrenden bir davet geldi.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Katıl", sonuc: "Keyifli vakit geçirdin.", etkiler: [{ tip: "mutluluk", deger: 8 }, { tip: "ozellik", deger: 4, ozellik: "sosyallik" }, { tip: "para", deger: -150 }] },
-      { id: "s2", metin: "Kısa uğra", sonuc: "Nazikçe katıldın.", etkiler: [{ tip: "mutluluk", deger: 4 }, { tip: "ozellik", deger: 2, ozellik: "sosyallik" }] },
-      { id: "s3", metin: "Reddet", sonuc: "Evde kaldın." },
+  },
+  {
+    kategori: "kariyer",
+    yasGrubu: ["genc"],
+    oncelik: 60,
+    scenes: [
+      {
+        baslik: "Staj Mülakatı",
+        aciklama: "Küçük bir şirkette staj için görüşmeye girdin. Yönetici deneyimini ve motivasyonunu soruyor.",
+        secenekler: [
+          { id: "s1", metin: "Dürüst ve hazırlıklı cevap ver", sonuc: "Staja kabul edildin. İlk profesyonel adımın.", etkiler: [{ tip: "ozellik", deger: 5, ozellik: "guven" }, { tip: "para", deger: 1500 }] },
+          { id: "s2", metin: "Abartılı iddialarda bulun", sonuc: "İlk hafta zorlandın; itibarın sarsıldı.", etkiler: [{ tip: "stres", deger: 7 }, { tip: "ozellik", deger: -2, ozellik: "guven" }] },
+          { id: "s3", metin: "Teklifi geri çevir", sonuc: "Kapı kapandı. Başka arayışlara devam.", etkiler: [{ tip: "stres", deger: 2 }] },
+        ],
+      },
+      {
+        baslik: "Kira Gerçeği",
+        aciklama: "Ailenden ayrı yaşamak istiyorsun ama maaşın ve birikimin sınırlı. Ortak ev ilanı gördün.",
+        secenekler: [
+          { id: "s1", metin: "Ortaya çıkıp odaya yerleş", sonuc: "Özgürlük arttı ama bütçe daraldı.", etkiler: [{ tip: "mutluluk", deger: 4 }, { tip: "para", deger: -4000 }, { tip: "stres", deger: 5 }] },
+          { id: "s2", metin: "Bir yıl daha aile yanında kal", sonuc: "Biriktirmeye devam. İlişkiler bazen geriliyor.", etkiler: [{ tip: "para", deger: 1000 }, { tip: "stres", deger: 3 }] },
+        ],
+      },
     ],
   },
   {
     kategori: "finans",
-    yasGrubu: ADULT_AGES,
-    oncelik: 35,
-    basliklar: [
-      "Beklenmedik Gider", "İndirim Fırsatı", "Bonus Haberi", "Fatura Şoku",
-      "Yatırım Tavsiyesi", "Market Alışverişi", "Online Alışveriş", "Vergi Hatırlatması",
-      "Kira Artışı", "Ek Gelir Fırsatı", "Tasarruf Planı", "Harçlık Düzeni",
+    yasGrubu: ["yetiskin", "orta_yas"],
+    oncelik: 50,
+    scenes: [
+      {
+        baslik: "Beklenmeyen Diş Faturası",
+        aciklama: "Kanal tedavisi gerekiyor. Özel klinikte fiyat yüksek; devlet hastanesinde sıra uzun.",
+        secenekler: [
+          { id: "s1", metin: "Özelde hemen yaptır", sonuc: "Ağrı geçti. Cüzdanın inceldi.", etkiler: [{ tip: "saglik", deger: 8 }, { tip: "para", deger: -6500 }] },
+          { id: "s2", metin: "Devlet hastanesini bekle", sonuc: "Haftalarca rahatsız ettin ama daha ucuza çözüldü.", etkiler: [{ tip: "saglik", deger: 4 }, { tip: "stres", deger: 6 }, { tip: "para", deger: -800 }] },
+          { id: "s3", metin: "Ağrıyı geçiştir", sonuc: "Sorun büyüdü. Sonra daha pahalıya patladı.", etkiler: [{ tip: "saglik", deger: -8 }, { tip: "stres", deger: 8 }] },
+        ],
+      },
+      {
+        baslik: "İşten Çıkarma Söylentisi",
+        aciklama: "Şirkette küçülme konuşuluyor. Takım arkadaşların panikte; sen de güvende hissetmiyorsun.",
+        secenekler: [
+          { id: "s1", metin: "Sessizce yeni iş bak", sonuc: "Hazırlıklı oldun. Stresin yönetilebilir kaldı.", etkiler: [{ tip: "stres", deger: 3 }, { tip: "ozellik", deger: 3, ozellik: "guven" }] },
+          { id: "s2", metin: "Yöneticinle net konuş", sonuc: "Netlik kazandın; belki fırsat da doğdu.", etkiler: [{ tip: "ozellik", deger: 4, ozellik: "guven" }] },
+          { id: "s3", metin: "Görmezden gel", sonuc: "Belirsizlik ruh halini bozdu.", etkiler: [{ tip: "stres", deger: 10 }, { tip: "mutluluk", deger: -4 }] },
+        ],
+      },
     ],
-    aciklamalar: [
-      "Cüzdanını etkileyen bir karar anı.",
-      "Finansal bir fırsat veya risk belirdi.",
-      "Para konusunda dikkatli olmalısın.",
-      "Bütçeni etkileyecek bir durum var.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Akıllıca yönet", sonuc: "Finansal disiplin kazandın.", etkiler: [{ tip: "para", deger: 800 }, { tip: "ozellik", deger: 2, ozellik: "guven" }] },
-      { id: "s2", metin: "Harcama yap", sonuc: "Kısa süreli mutluluk.", etkiler: [{ tip: "mutluluk", deger: 6 }, { tip: "para", deger: -1200 }] },
-      { id: "s3", metin: "Ertele", sonuc: "Kararı erteledin." },
+  },
+  {
+    kategori: "saglik",
+    yasGrubu: ["orta_yas", "yasli"],
+    oncelik: 55,
+    scenes: [
+      {
+        baslik: "Check-up Sonuçları",
+        aciklama: "Kan değerlerinde borderline kolesterol çıkıyor. Doktor yaşam tarzı değişikliği öneriyor.",
+        secenekler: [
+          { id: "s1", metin: "Diyet ve yürüyüşe başla", sonuc: "Üç ayda değerler düzelmeye başladı.", etkiler: [{ tip: "saglik", deger: 10 }, { tip: "stres", deger: -3 }] },
+          { id: "s2", metin: "İlaçla idare et", sonuc: "Kontrol altında ama kök neden duruyor.", etkiler: [{ tip: "saglik", deger: 4 }, { tip: "para", deger: -1200 }] },
+          { id: "s3", metin: "Ertele", sonuc: "Risk büyüyor. Yorgunluğun arttı.", etkiler: [{ tip: "saglik", deger: -8 }] },
+        ],
+      },
     ],
   },
   {
     kategori: "romantik",
-    yasGrubu: TEEN_AGES.concat(["yetiskin"]),
+    yasGrubu: ["genc", "yetiskin"],
     oncelik: 45,
-    basliklar: [
-      "Mesaj Beklentisi", "Romantik Akşam", "Kıskançlık Anı", "İlk Buluşma",
-      "Özür Zamanı", "Sürpriz Hediye", "Uzun Mesafe", "Aileye Tanıtma",
-      "Tartışma Sonrası", "Ortak Gelecek", "Flört Sinyali", "İlişki Molası",
-    ],
-    aciklamalar: [
-      "Kalbinle ilgili bir karar vermen gerekiyor.",
-      "Romantik hayatında yeni bir gelişme var.",
-      "İlişkin test ediliyor.",
-      "Duygusal bir an yaşanıyor.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Samimi ol", sonuc: "Bağınız güçlendi.", etkiler: [{ tip: "mutluluk", deger: 10 }, { tip: "ozellik", deger: 3, ozellik: "sevgi" }] },
-      { id: "s2", metin: "Temkinli ol", sonuc: "Mesafeni korudun.", etkiler: [{ tip: "stres", deger: -2 }] },
-      { id: "s3", metin: "Uzaklaş", sonuc: "Soğuk bir dönem başladı.", etkiler: [{ tip: "mutluluk", deger: -6 }] },
+    scenes: [
+      {
+        baslik: "Ciddiyet Konuşması",
+        aciklama: "Bir süredir gördüğün kişi 'nereye gidiyoruz?' diye soruyor. Sen de net değilsin.",
+        secenekler: [
+          { id: "s1", metin: "Ciddi ilişki istediğini söyle", sonuc: "Netlik ilişkiyi ilerletti.", etkiler: [{ tip: "mutluluk", deger: 6 }, { tip: "ozellik", deger: 3, ozellik: "sevgi" }] },
+          { id: "s2", metin: "Zaman istediğini söyle", sonuc: "Saygı duyuldu ama belirsizlik sürdü.", etkiler: [{ tip: "stres", deger: 2 }] },
+          { id: "s3", metin: "Uzaklaş", sonuc: "İlişki bitti. Bir süre yalnız kaldın.", etkiler: [{ tip: "mutluluk", deger: -6 }, { tip: "stres", deger: 5 }] },
+        ],
+      },
     ],
   },
   {
     kategori: "rastgele",
-    yasGrubu: ALL_AGES.filter((a) => a !== "bebek"),
-    oncelik: 25,
-    basliklar: [
-      "Garip Rastlantı", "Kayıp Eşya", "Yağmur Baskını", "Sokak Sanatçısı",
-      "Bedava Kahve", "Yanlış Numara", "Elektrik Kesintisi", "Komşu Yardımı",
-      "Kedi Miyaavladı", "Şanslı Bilet", "Eski Fotoğraf", "Ani İlham",
-    ],
-    aciklamalar: [
-      "Hayat bazen sürprizlerle gelir.",
-      "Beklenmedik küçük bir olay yaşandı.",
-      "Günün akışını değiştiren bir an.",
-      "Rastgele bir durumla karşılaştın.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Olumlu karşıla", sonuc: "Gününüz güzelleşti.", etkiler: [{ tip: "mutluluk", deger: 5 }] },
-      { id: "s2", metin: "Merak et", sonuc: "İlginç bir deneyim.", etkiler: [{ tip: "ozellik", deger: 2, ozellik: "zeka" }] },
-      { id: "s3", metin: "Umursama", sonuc: "Hayat normal aktı." },
-    ],
-  },
-  {
-    kategori: "yasam",
-    yasGrubu: CHILD_AGES,
-    oncelik: 40,
-    basliklar: [
-      "Park Macerası", "Oyuncak Paylaşımı", "Masal Saati", "Resim Yapma",
-      "Bisiklet Denemesi", "Dondurma Sevinci", "Korku Filmi", "Gizli Kulüp",
-      "Okul Servisi", "Öğle Arası", "Ev Ödevi İsyanı", "Yeni Ayakkabı",
-    ],
-    aciklamalar: [
-      "Çocukluk yıllarının renkli bir anı.",
-      "Küçük ama önemli bir seçim.",
-      "Oyun ve keşif zamanı.",
-      "Merak dolu bir gün.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Heyecanla katıl", sonuc: "Harika anılar birikti.", etkiler: [{ tip: "mutluluk", deger: 8 }] },
-      { id: "s2", metin: "Temkinli ol", sonuc: "Güvenli bir deneyim.", etkiler: [{ tip: "mutluluk", deger: 3 }] },
+    yasGrubu: ["ilkokul", "ergen", "genc", "yetiskin", "orta_yas"],
+    oncelik: 20,
+    scenes: [
+      {
+        baslik: "Yağmurda Islanmak",
+        aciklama: "Şemsiyesiz yakalandın. Durak dolu; eve 15 dakika yürüme var.",
+        secenekler: [
+          { id: "s1", metin: "Koşarak eve git", sonuc: "Islanınca üşüttün ama hızlı vardın.", etkiler: [{ tip: "saglik", deger: -3 }, { tip: "stres", deger: 2 }] },
+          { id: "s2", metin: "Bir markete girip bekle", sonuc: "Zaman kaybettin ama kuru kaldın.", etkiler: [{ tip: "para", deger: -40 }] },
+        ],
+      },
+      {
+        baslik: "Kayıp Cüzdan Panik",
+        aciklama: "Cüzdanını bulamıyorsun. Son gördüğün yer otobüs veya kafe olabilir.",
+        secenekler: [
+          { id: "s1", metin: "Geri dönüp ara", sonuc: "Kafede unutulmuş; görevli teslim etti.", etkiler: [{ tip: "mutluluk", deger: 5 }, { tip: "stres", deger: -4 }] },
+          { id: "s2", metin: "Kartları iptal ettir", sonuc: "Güvenli ama zahmetli bir gün.", etkiler: [{ tip: "stres", deger: 6 }, { tip: "para", deger: -150 }] },
+        ],
+      },
     ],
   },
   {
     kategori: "yasam",
-    yasGrubu: SENIOR_AGES,
-    oncelik: 40,
-    basliklar: [
-      "Anı Defteri", "Torun Oyunu", "Sabah Yürüyüşü", "Eski Dost Ziyareti",
-      "Bahçe İşi", "Doktor Randevusu", "Emeklilik Kulübü", "Gazete Keyfi",
-      "Aile Albümü", "Vasiyet Düşüncesi", "Komşu Çayı", "Nostalji Akşamı",
-    ],
-    aciklamalar: [
-      "Yaşamın olgun döneminde yeni bir gün.",
-      "Huzur ve anılar iç içe.",
-      "Deneyiminle ilgili bir seçim.",
-      "Sakin ama anlamlı bir an.",
-    ],
-    secenekler: [
-      { id: "s1", metin: "Keyfini çıkar", sonuc: "İç huzurun arttı.", etkiler: [{ tip: "mutluluk", deger: 8 }, { tip: "stres", deger: -6 }] },
-      { id: "s2", metin: "Paylaş", sonuc: "Sevdiklerinle bağın güçlendi.", etkiler: [{ tip: "mutluluk", deger: 6 }, { tip: "ozellik", deger: 3, ozellik: "sevgi" }] },
-      { id: "s3", metin: "Dinlen", sonuc: "Sakin bir gün.", etkiler: [{ tip: "stres", deger: -4 }] },
-    ],
-  },
-  {
-    kategori: "yasam",
-    yasGrubu: ["bebek"],
+    yasGrubu: ["yasli", "ileri_yas"],
     oncelik: 50,
-    basliklar: [
-      "İlk Gülüş", "Mama Zamanı", "Uyku Düzeni", "Oyuncak Sesleri",
-      "Banyo Keyfi", "Kucak Zamanı", "Göz Teması", "İlk Diş",
+    scenes: [
+      {
+        baslik: "Yalnız Bir Öğleden Sonra",
+        aciklama: "Ev sessiz. Torunlar gelmeyecek. Televizyon açık ama dikkatini çekmiyor.",
+        secenekler: [
+          { id: "s1", metin: "Komşuya çaya git", sonuc: "Sohbet iyi geldi. Yalnızlık hafifledi.", etkiler: [{ tip: "mutluluk", deger: 6 }, { tip: "ozellik", deger: 2, ozellik: "sosyallik" }] },
+          { id: "s2", metin: "Eski fotoğraflara bak", sonuc: "Nostalji hem ısıttı hem hüzünlendirdi.", etkiler: [{ tip: "mutluluk", deger: 2 }, { tip: "stres", deger: -2 }] },
+          { id: "s3", metin: "Kısa bir yürüyüş yap", sonuc: "Hava almak iyi geldi.", etkiler: [{ tip: "saglik", deger: 4 }, { tip: "mutluluk", deger: 3 }] },
+        ],
+      },
     ],
-    aciklamalar: [
-      "Bebeklik döneminin tatlı bir anı.",
-      "Ailen seninle ilgileniyor.",
-      "Yeni bir duyusal deneyim.",
-      "Güvenli ve sıcak bir gün.",
+  },
+  {
+    kategori: "egitim",
+    yasGrubu: ["ilkokul", "ergen"],
+    oncelik: 55,
+    scenes: [
+      {
+        baslik: "Öğretmen Görüşmesi",
+        aciklama: "Veli toplantısında öğretmen notlarını ve davranışını anlatıyor. Ailen seni dinliyor.",
+        secenekler: [
+          { id: "s1", metin: "Eleştiriyi kabul et, plan yap", sonuc: "Ailen destekledi. Çalışma düzenin toparlandı.", etkiler: [{ tip: "ozellik", deger: 3, ozellik: "zeka" }, { tip: "stres", deger: 2 }] },
+          { id: "s2", metin: "Savunmaya geç", sonuc: "Gerginlik arttı. Evde tartışma çıktı.", etkiler: [{ tip: "stres", deger: 6 }, { tip: "mutluluk", deger: -3 }] },
+        ],
+      },
+      {
+        baslik: "Kütüphane Ödevi",
+        aciklama: "Proje için kaynak lazım. İnternet yeterli değil; kütüphaneye gitmen gerekiyor.",
+        secenekler: [
+          { id: "s1", metin: "Kütüphanede çalış", sonuc: "Kaynaklar güçlendirdi. Notun yükseldi.", etkiler: [{ tip: "ozellik", deger: 4, ozellik: "zeka" }] },
+          { id: "s2", metin: "Yarım yamalak internetten yap", sonuc: "Geçtin ama yüzeysel kaldı.", etkiler: [{ tip: "ozellik", deger: 1, ozellik: "zeka" }, { tip: "stres", deger: 2 }] },
+        ],
+      },
     ],
-    secenekler: [
-      { id: "s1", metin: "Mutlu tepki ver", sonuc: "Ailen sevindi.", etkiler: [{ tip: "mutluluk", deger: 5 }] },
-      { id: "s2", metin: "Ağla", sonuc: "İhtiyaçların karşılandı.", etkiler: [{ tip: "mutluluk", deger: 2 }] },
+  },
+  {
+    kategori: "sosyal",
+    yasGrubu: ["cocuk", "ilkokul"],
+    oncelik: 45,
+    scenes: [
+      {
+        baslik: "Doğum Günü Daveti",
+        aciklama: "Sınıftan bir çocuk seni doğum gününe çağırdı. Hediye almak ve gitmek istiyorsun.",
+        secenekler: [
+          { id: "s1", metin: "Git ve hediye götür", sonuc: "Eğlenceli bir öğleden sonra. Yeni bağlar kuruldu.", etkiler: [{ tip: "mutluluk", deger: 5 }, { tip: "ozellik", deger: 3, ozellik: "sosyallik" }, { tip: "para", deger: -80 }] },
+          { id: "s2", metin: "Gitme", sonuc: "Evde kaldın. Biraz üzgün hissettin.", etkiler: [{ tip: "mutluluk", deger: -2 }] },
+        ],
+      },
+    ],
+  },
+  {
+    kategori: "kariyer",
+    yasGrubu: ["yetiskin", "orta_yas"],
+    oncelik: 50,
+    scenes: [
+      {
+        baslik: "Mesai Baskısı",
+        aciklama: "Proje teslimi yaklaştı. Müdür ekstra mesai istiyor; ailen akşam yemeğini bekliyor.",
+        secenekler: [
+          { id: "s1", metin: "Mesaiye kal", sonuc: "Teslim yetişti ama yorgunluk ve aile gerilimi arttı.", etkiler: [{ tip: "para", deger: 3000 }, { tip: "stres", deger: 8 }, { tip: "mutluluk", deger: -3 }] },
+          { id: "s2", metin: "Sınır koy, yarın erken gel", sonuc: "Dengeyi korudun. Yönetici pek memnun değil.", etkiler: [{ tip: "stres", deger: 3 }, { tip: "ozellik", deger: 2, ozellik: "guven" }] },
+        ],
+      },
+      {
+        baslik: "Performans Görüşmesi",
+        aciklama: "Yıllık değerlendirme. Zam ve unvan konuşulabilir ama kanıt göstermen lazım.",
+        secenekler: [
+          { id: "s1", metin: "Hazırlıklı sunum yap", sonuc: "Küçük bir zam aldın.", etkiler: [{ tip: "para", deger: 5000 }, { tip: "ozellik", deger: 3, ozellik: "guven" }] },
+          { id: "s2", metin: "Pasif kal", sonuc: "Statüko devam. İçin sıkıldı.", etkiler: [{ tip: "stres", deger: 4 }] },
+        ],
+      },
+    ],
+  },
+  {
+    kategori: "saglik",
+    yasGrubu: ["bebek", "cocuk"],
+    oncelik: 50,
+    scenes: [
+      {
+        baslik: "Ateş ve Nezle",
+        aciklama: "Gece ateşin çıktı. Annen ıslak bezle alnını siliyor; doktora gidilsin mi diye tartışıyorlar.",
+        secenekler: [
+          { id: "s1", metin: "Doktora gidin", sonuc: "Kontrol edildi. İlaçla düzelme başladı.", etkiler: [{ tip: "saglik", deger: 6 }, { tip: "para", deger: -200 }] },
+          { id: "s2", metin: "Evde dinlen", sonuc: "Birkaç gün huysuz geçti ama iyileştin.", etkiler: [{ tip: "saglik", deger: 2 }, { tip: "stres", deger: 3 }] },
+        ],
+      },
+    ],
+  },
+  {
+    kategori: "romantik",
+    yasGrubu: ["ergen"],
+    oncelik: 40,
+    scenes: [
+      {
+        baslik: "Okul Koridoru",
+        aciklama: "Beğendiğin biriyle göz göze geldiniz. Arkadaşların fısıldaşıyor. Ne diyeceksin?",
+        secenekler: [
+          { id: "s1", metin: "Selam verip geç", sonuc: "Küçük bir adım. Kapı açık kaldı.", etkiler: [{ tip: "ozellik", deger: 2, ozellik: "sosyallik" }, { tip: "mutluluk", deger: 2 }] },
+          { id: "s2", metin: "Kaç ve utan", sonuc: "Fırsat kaçtı. İçin kıpır kıpır.", etkiler: [{ tip: "stres", deger: 3 }] },
+          { id: "s3", metin: "Arkadaşlarınla dalga geç", sonuc: "Kaba kaçtı. İlişki geriledi.", etkiler: [{ tip: "ozellik", deger: -3, ozellik: "empati" }, { tip: "mutluluk", deger: -2 }] },
+        ],
+      },
+    ],
+  },
+  {
+    kategori: "finans",
+    yasGrubu: ["ergen"],
+    oncelik: 35,
+    scenes: [
+      {
+        baslik: "Harçlık Bitmek Üzere",
+        aciklama: "Ayın sonu. Arkadaşların dışarı çıkmak istiyor; cebinde az para kaldı.",
+        secenekler: [
+          { id: "s1", metin: "Evde kal, biriktir", sonuc: "Sıkıcı ama mantıklı bir seçim.", etkiler: [{ tip: "para", deger: 50 }, { tip: "mutluluk", deger: -1 }] },
+          { id: "s2", metin: "Ucuz bir aktivite öner", sonuc: "Hem sosyal hem idareli oldun.", etkiler: [{ tip: "mutluluk", deger: 3 }, { tip: "para", deger: -40 }] },
+          { id: "s3", metin: "Borç iste", sonuc: "Gittiniz ama borçlu kaldın.", etkiler: [{ tip: "mutluluk", deger: 2 }, { tip: "stres", deger: 4 }, { tip: "para", deger: -20 }] },
+        ],
+      },
+    ],
+  },
+  {
+    kategori: "aile",
+    yasGrubu: ["genc", "yetiskin"],
+    oncelik: 45,
+    scenes: [
+      {
+        baslik: "Aile Büyüklerinin Ziyareti",
+        aciklama: "Büyükanne/büyükbaba geliyor. Ev temizliği, yemek ve uzun sohbetler bekleniyor.",
+        secenekler: [
+          { id: "s1", metin: "İyi ağırla", sonuc: "Aile bağları güçlendi.", etkiler: [{ tip: "mutluluk", deger: 5 }, { tip: "ozellik", deger: 3, ozellik: "sevgi" }, { tip: "stres", deger: 3 }] },
+          { id: "s2", metin: "Kısa uğra, bahaneyle çık", sonuc: "Rahatladın ama suçluluk hissettin.", etkiler: [{ tip: "stres", deger: -2 }, { tip: "mutluluk", deger: -2 }] },
+        ],
+      },
     ],
   },
 ];
@@ -258,38 +360,43 @@ function hashString(input: string): number {
   return Math.abs(h);
 }
 
-function pick<T>(arr: T[], seed: number): T {
-  return arr[seed % arr.length];
-}
-
-export function generateProceduralEvents(targetCount = 500): GameEvent[] {
+/** Gerçekçi hikâye şablonlarından 600+ varyasyon üretir */
+export function generateProceduralEvents(targetCount = 600): GameEvent[] {
   const events: GameEvent[] = [];
   let index = 0;
 
   while (events.length < targetCount) {
-    const template = templates[index % templates.length];
-    const variant = Math.floor(index / templates.length);
-    const seed = hashString(`${template.kategori}-${index}-${variant}`);
+    const story = stories[index % stories.length];
+    const scene = story.scenes[index % story.scenes.length];
+    const variant = Math.floor(index / stories.length);
+    const seed = hashString(`${story.kategori}-${scene.baslik}-${variant}`);
 
-    const baslik = pick(template.basliklar, seed);
-    const aciklama = pick(template.aciklamalar, seed + 1);
-    const suffix = variant > 0 ? ` #${variant + 1}` : "";
+    // Küçük gerçekçi varyasyon: etki değerlerini ±1 oynat
+    const secenekler = scene.secenekler.map((s, i) => ({
+      ...s,
+      id: `s${i + 1}`,
+      etkiler: s.etkiler?.map((e) => ({
+        ...e,
+        deger: e.deger + ((seed + i) % 3) - 1,
+      })),
+    }));
+
+    const nuance = [
+      "",
+      " Bu sefer daha temkinlisin.",
+      " Ailenin beklentisi yüksek.",
+      " Zamanın kısıtlı.",
+      " İçgüdülerin karışık.",
+    ][variant % 5];
 
     events.push({
-      id: `proc-${template.kategori}-${index}`,
-      baslik: `${baslik}${suffix}`,
-      aciklama,
-      kategori: template.kategori,
-      yasGrubu: template.yasGrubu,
-      oncelik: Math.max(10, template.oncelik - (variant % 5)),
-      secenekler: template.secenekler.map((s, i) => ({
-        ...s,
-        id: `s${i + 1}`,
-        etkiler: s.etkiler?.map((e) => ({
-          ...e,
-          deger: e.deger + ((seed + i) % 3) - 1,
-        })),
-      })),
+      id: `story-${story.kategori}-${index}`,
+      baslik: scene.baslik,
+      aciklama: scene.aciklama + nuance,
+      kategori: story.kategori,
+      yasGrubu: story.yasGrubu,
+      oncelik: Math.max(15, story.oncelik - (variant % 8)),
+      secenekler,
     });
 
     index++;

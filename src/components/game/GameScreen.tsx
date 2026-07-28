@@ -3,7 +3,6 @@
 import { Button } from "@/components/ui/Button";
 import { CharacterPanel } from "@/components/game/CharacterPanel";
 import { EventCard } from "@/components/game/EventCard";
-import { EventHistory } from "@/components/game/EventHistory";
 import { FamilyPanel } from "@/components/game/FamilyPanel";
 import { GameTabs } from "@/components/game/GameTabs";
 import { FinancePanel } from "@/components/game/FinancePanel";
@@ -13,6 +12,8 @@ import { PropertyPanel } from "@/components/game/PropertyPanel";
 import { HealthPanel } from "@/components/game/HealthPanel";
 import { AchievementsPanel } from "@/components/game/AchievementsPanel";
 import { SocialPanel } from "@/components/game/SocialPanel";
+import { LifestylePanel } from "@/components/game/LifestylePanel";
+import { LifeJournal } from "@/components/game/LifeJournal";
 import { DeathScreen } from "@/components/game/DeathScreen";
 import { Notifications } from "@/components/game/Notifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -27,6 +28,8 @@ export function GameScreen() {
     relationships,
     currentEvent,
     eventHistory,
+    journal,
+    lifetimeScore,
     activeTab,
     isDead,
     isSaving,
@@ -51,7 +54,7 @@ export function GameScreen() {
   }
 
   return (
-    <div className="space-y-5 md:space-y-6">
+    <div className="space-y-5 md:space-y-6 pb-24 md:pb-0">
       <Notifications />
 
       <GameTabs active={activeTab} onChange={setActiveTab} />
@@ -83,10 +86,11 @@ export function GameScreen() {
           </Button>
         </div>
       </div>
+
       {activeTab === "hayat" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
-            <CharacterPanel character={player} money={life.para} />
+            <CharacterPanel character={player} money={life.para} score={lifetimeScore} />
           </div>
           <div className="lg:col-span-2 space-y-6">
             {currentEvent ? (
@@ -103,7 +107,7 @@ export function GameScreen() {
                 </Button>
               </div>
             )}
-            <EventHistory events={eventHistory} />
+            <LifeJournal journal={journal} events={eventHistory} />
           </div>
         </div>
       )}
@@ -120,6 +124,7 @@ export function GameScreen() {
       {activeTab === "egitim" && <EducationPanel />}
       {activeTab === "mulk" && <PropertyPanel />}
       {activeTab === "sosyal" && <SocialPanel />}
+      {activeTab === "yasam" && <LifestylePanel />}
       {activeTab === "basarim" && <AchievementsPanel />}
     </div>
   );

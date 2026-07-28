@@ -4,14 +4,17 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useGameStore } from "@/store/game-store";
 import { Skull } from "lucide-react";
+import { formatMoney } from "@/lib/generators";
 
 export function DeathScreen() {
-  const { player, family, resetGame, continueAsChild } = useGameStore();
+  const { player, family, relationships, life, lifetimeScore, resetGame, continueAsChild } = useGameStore();
 
   if (!player) return null;
 
   const children = family.filter(
-    (c) => c.durum === "yasiyor" && c.yas >= 0
+    (c) =>
+      c.durum === "yasiyor" &&
+      relationships.some((r) => r.targetId === c.id && r.tip === "cocuk")
   );
 
   return (
@@ -25,11 +28,19 @@ export function DeathScreen() {
           <p className="text-content-secondary mt-2">
             {player.isim} {player.soyisim}, {player.yas} yaşında hayata veda etti.
           </p>
+          <p className="text-sm text-accent mt-2">Yaşam skoru: {lifetimeScore}</p>
+          {life && (
+            <p className="text-xs text-content-muted mt-1">
+              Miras havuzu (yaklaşık): {formatMoney(life.para + life.bankaBakiyesi)}
+            </p>
+          )}
         </div>
 
         {children.length > 0 && (
           <div className="space-y-3">
-            <p className="text-sm text-content-secondary">Bir çocuğunla devam edebilirsin:</p>
+            <p className="text-sm text-content-secondary">
+              Çocuğunla devam et — servetin bir kısmı miras olarak geçer:
+            </p>
             {children.map((child) => (
               <Button
                 key={child.id}

@@ -1,6 +1,7 @@
 import type { Character, Gender, Relationship, Life } from "@/types/game";
 import { TURKISH_NAMES } from "@/lib/constants";
 import { generatePersonality } from "@/lib/generators";
+import { inheritGenetics } from "@/lib/systems/genetics";
 
 function createId(): string {
   return crypto.randomUUID();
@@ -60,6 +61,9 @@ export function createChild(
 ): Character {
   const cinsiyet: Gender = Math.random() > 0.5 ? "erkek" : "kadin";
   const soyisim = spouse?.soyisim ?? player.soyisim;
+  const anne = player.cinsiyet === "kadin" ? player : spouse;
+  const baba = player.cinsiyet === "erkek" ? player : spouse;
+  const { genetics, ozellikler } = inheritGenetics(anne, baba, cinsiyet);
 
   return {
     id: createId(),
@@ -72,9 +76,9 @@ export function createChild(
     cinsiyet,
     meslek: null,
     gelir: 0,
-    ozellikler: generatePersonality(),
-    saglik: randomInt(70, 95),
-    mutluluk: randomInt(70, 95),
+    ozellikler,
+    saglik: Math.max(60, Math.min(95, ozellikler.saglik + randomInt(-5, 10))),
+    mutluluk: ozellikler.mutluluk,
     stres: 5,
     uyku: 80,
     beslenme: 80,
@@ -82,12 +86,17 @@ export function createChild(
     psikoloji: 80,
     egitim: "yok",
     durum: "yasiyor",
-    anneId: player.cinsiyet === "kadin" ? player.id : spouse?.id ?? null,
-    babaId: player.cinsiyet === "erkek" ? player.id : spouse?.id ?? null,
+    anneId: anne?.id ?? null,
+    babaId: baba?.id ?? null,
     esId: null,
     sehir: player.sehir,
     ulke: player.ulke,
     isPlayer: false,
+    sacRengi: genetics.sacRengi,
+    gozRengi: genetics.gozRengi,
+    tenRengi: genetics.tenRengi,
+    boyPotansiyeli: genetics.boyPotansiyeli,
+    genetikOzet: `Anne %${genetics.ebeveynKatkisi.anne} / Baba %${genetics.ebeveynKatkisi.baba}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

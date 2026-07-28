@@ -147,7 +147,7 @@ export const RELATIONSHIP_ACTIONS = [
 ];
 
 export const ROMANTIC_ACTIONS = [
-  { id: "flort", label: "Flört Et", minYas: 14 },
+  { id: "flort", label: "Flört Et", minYas: 15 },
   { id: "sevgili", label: "Sevgili Ol", minYas: 16 },
   { id: "nisan", label: "Nişanlan", minYas: 18 },
   { id: "evlilik", label: "Evlen", minYas: 18 },

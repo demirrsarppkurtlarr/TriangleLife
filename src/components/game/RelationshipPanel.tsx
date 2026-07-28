@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useGameStore } from "@/store/game-store";
 import { RELATIONSHIP_ACTIONS, ROMANTIC_ACTIONS } from "@/lib/constants";
-import { getRelationshipLevel } from "@/lib/systems/relationships";
+import { getRelationshipLevel, ACTION_LIMITS, checkActionAllowed } from "@/lib/systems/relationships";
 import { Users, Heart } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -13,9 +13,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function RelationshipPanel() {
-  const { family, relationships, player, relationshipAction } = useGameStore();
+  const { family, relationships, player, life, relationshipAction, actionCooldowns } = useGameStore();
 
-  if (!player) return null;
+  if (!player || !life) return null;
 
   const allPeople = [
     ...family.map((f) => ({ char: f, rel: relationships.find((r) => r.targetId === f.id) })),
@@ -24,10 +24,13 @@ export function RelationshipPanel() {
   return (
     <div className="space-y-4">
       <Card variant="glass" padding="md">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-2">
           <Users size={20} className="text-accent" />
           <h3 className="font-display text-lg font-semibold text-content">İlişkiler</h3>
         </div>
+        <p className="text-xs text-content-muted mb-4">
+          Sohbet yılda en fazla {ACTION_LIMITS.sohbet.maxPerYear} kez; puanlar sınırlı artar.
+        </p>
 
         {allPeople.length === 0 ? (
           <p className="text-sm text-content-muted">Henüz ilişkin yok.</p>
@@ -50,16 +53,27 @@ export function RelationshipPanel() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {RELATIONSHIP_ACTIONS.filter((a) => rel.puan >= a.minPuan || a.minPuan === 0).map((action) => (
-                      <Button
-                        key={action.id}
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => relationshipAction(char.id, action.id)}
-                      >
-                        {action.label}
-                      </Button>
-                    ))}
+                    {RELATIONSHIP_ACTIONS.filter((a) => rel.puan >= a.minPuan || a.minPuan === 0).map((action) => {
+                      const check = checkActionAllowed(
+                        player.yas,
+                        char.id,
+                        action.id,
+                        life.mevcutYil,
+                        actionCooldowns
+                      );
+                      return (
+                        <Button
+                          key={action.id}
+                          variant="secondary"
+                          size="sm"
+                          disabled={!check.ok}
+                          title={check.reason}
+                          onClick={() => relationshipAction(char.id, action.id)}
+                        >
+                          {action.label}
+                        </Button>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -68,7 +82,7 @@ export function RelationshipPanel() {
         )}
       </Card>
 
-      {player.yas >= 14 && (
+      {player.yas >= 15 && (
         <Card variant="glass" padding="md">
           <div className="flex items-center gap-2 mb-4">
             <Heart size={20} className="text-accent" />
@@ -81,7 +95,13 @@ export function RelationshipPanel() {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  const target = family.find((f) => f.yas >= player.yas - 5 && f.yas <= player.yas + 5);
+                  const target = family.find(
+                    (f) =>
+                      f.durum === "yasiyor" &&
+                      f.yas >= Math.max(15, player.yas - 8) &&
+                      f.yas <= player.yas + 8 &&
+                      f.id !== player.esId
+                  );
                   if (target) relationshipAction(target.id, action.id);
                 }}
               >

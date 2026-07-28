@@ -13,21 +13,27 @@ import type {
   Achievement,
   GameNotification,
   EducationLevel,
+  JournalEntry,
+  SavedGameState,
 } from "@/types/game";
-import { getAgeGroup, VEHICLE_TYPES } from "@/lib/constants";
+import { getAgeGroup, VEHICLE_TYPES, CITIES } from "@/lib/constants";
 import { generateFamily, buildPersonalityFromFocus } from "@/lib/generators";
 import { getRandomEvent } from "@/lib/events/event-pool";
 import type { CharacterCreationOptions } from "@/types/creation";
 import { WEALTH_STARTING_MONEY } from "@/types/creation";
 import { applyHealthDecay, applyHealing } from "@/lib/systems/health";
-import { calculateLoanPayment, simulateMarketPrice, INVESTMENT_SYMBOLS } from "@/lib/systems/finance";
-import { applyRelationshipAction } from "@/lib/systems/relationships";
+import { calculateLoanPayment, simulateMarketPrice, INVESTMENT_SYMBOLS, calculateTax } from "@/lib/systems/finance";
+import {
+  applyRelationshipAction,
+  checkActionAllowed,
+  updateCooldowns,
+  type ActionCooldown,
+} from "@/lib/systems/relationships";
 import { getEducationForAge, calculateSalary } from "@/lib/systems/career";
 import { DEFAULT_ACHIEVEMENTS, checkAchievements, getNewlyUnlocked } from "@/lib/systems/achievements";
 import { saveGameState, loadActiveLife, unlockAchievement } from "@/lib/supabase/game-service";
 import { saveToLocal, loadFromLocal, clearLocalSave } from "@/lib/local-storage";
 import { SOCIAL_ACTIVITIES } from "@/lib/systems/social";
-import { calculateTax } from "@/lib/systems/finance";
 import {
   createSpouse,
   createChild,
@@ -40,6 +46,61 @@ import {
   type NpcMemory,
 } from "@/lib/systems/npc-ai";
 import { DECORATION_CATALOG } from "@/lib/systems/decoration";
+import {
+  canAccessFinance,
+  canInvest,
+  canTakeLoan,
+  canStartCompany,
+  canBuyHome,
+  canBuyVehicle,
+  canWork,
+  canStudyUniversity,
+  getPocketMoney,
+  getAgeBlockedMessage,
+} from "@/lib/systems/age-gates";
+import { inheritGenetics, type GeneticsProfile } from "@/lib/systems/genetics";
+import {
+  createNeighborhood,
+  neighborhoodYearTick,
+  helpNeighbor as helpNeighborFn,
+  type NeighborhoodState,
+} from "@/lib/systems/neighborhood";
+import {
+  createSchoolState,
+  schoolYearTick,
+  studyHarder,
+  skipStudy,
+  type SchoolState,
+} from "@/lib/systems/school";
+import {
+  createCrimeState,
+  attemptCrime,
+  releaseIfDue,
+  type CrimeState,
+} from "@/lib/systems/crime";
+import {
+  createPoliticsState,
+  setLean,
+  vote,
+  joinParty,
+  type PoliticsState,
+  type PoliticalLean,
+} from "@/lib/systems/politics";
+import {
+  createReligionState,
+  setBelief,
+  setPractice,
+  worship,
+  type ReligionState,
+  type ReligionPractice,
+} from "@/lib/systems/religion";
+import {
+  startHobby,
+  practiceHobby,
+  type Hobby,
+} from "@/lib/systems/hobbies";
+import { calculateLifeScore, submitScore } from "@/lib/systems/score";
+import { cityCostMultiplier } from "@/lib/systems/city-depth";
 
 interface GameState {
   life: Life | null;
@@ -56,6 +117,17 @@ interface GameState {
   notifications: GameNotification[];
   npcMemories: NpcMemory[];
   decorations: string[];
+  journal: JournalEntry[];
+  neighborhood: NeighborhoodState | null;
+  school: SchoolState | null;
+  crime: CrimeState;
+  politics: PoliticsState;
+  religion: ReligionState;
+  hobbies: Hobby[];
+  genetics: GeneticsProfile | null;
+  actionCooldowns: ActionCooldown[];
+  aileDurumu: string;
+  lifetimeScore: number;
   activeTab: GameTab;
   isLoading: boolean;
   isSaving: boolean;
@@ -82,7 +154,18 @@ interface GameState {
   payTax: () => void;
   hireEmployee: (companyId: string) => void;
   buyDecoration: (decorationId: string) => void;
-  loadLocalGame: () => boolean;
+  helpNeighbor: (neighborId: string) => void;
+  schoolStudy: (hard: boolean) => void;
+  attemptCrimeAction: (crimeId: string) => void;
+  setPoliticalLean: (lean: PoliticalLean) => void;
+  castVote: () => void;
+  joinPoliticalParty: () => void;
+  setReligionBelief: (inanc: string) => void;
+  setReligionPractice: (pratik: ReligionPractice) => void;
+  worshipAction: () => void;
+  startHobbyAction: (hobbyId: string) => void;
+  practiceHobbyAction: (hobbyId: string) => void;
+  loadLocalGame: (slot?: number) => boolean;
   dismissNotification: (id: string) => void;
   resetGame: () => void;
   persist: () => Promise<void>;
@@ -159,12 +242,42 @@ function addNotification(
   return [{ id: createId(), mesaj, tip }, ...notifications].slice(0, 5);
 }
 
+function addJournal(
+  journal: JournalEntry[],
+  yil: number,
+  yas: number,
+  baslik: string,
+  metin: string,
+  kategori: string
+): JournalEntry[] {
+  return [
+    { id: createId(), yil, yas, baslik, metin, kategori },
+    ...journal,
+  ].slice(0, 200);
+}
+
 function checkPlayerDeath(player: Character): boolean {
   if (player.saglik <= 0) return true;
   if (player.yas > 95 && Math.random() < 0.3) return true;
   if (player.yas > 85 && Math.random() < 0.1) return true;
   if (player.yas > 75 && player.saglik < 20 && Math.random() < 0.15) return true;
   return false;
+}
+
+function defaultExtras() {
+  return {
+    journal: [] as JournalEntry[],
+    neighborhood: null as NeighborhoodState | null,
+    school: null as SchoolState | null,
+    crime: createCrimeState(),
+    politics: createPoliticsState(),
+    religion: createReligionState(),
+    hobbies: [] as Hobby[],
+    genetics: null as GeneticsProfile | null,
+    actionCooldowns: [] as ActionCooldown[],
+    aileDurumu: "orta",
+    lifetimeScore: 0,
+  };
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -182,6 +295,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   notifications: [],
   npcMemories: [],
   decorations: [],
+  ...defaultExtras(),
   activeTab: "hayat",
   isLoading: false,
   isSaving: false,
@@ -201,9 +315,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
       const ageGroup = getAgeGroup(saved.player.yas);
       set({
+        ...defaultExtras(),
         ...saved,
-        currentEvent: getRandomEvent(ageGroup),
+        journal: saved.journal ?? [],
+        neighborhood: saved.neighborhood ?? createNeighborhood(saved.player.sehir),
+        school: saved.school ?? createSchoolState(saved.player.yas),
+        crime: saved.crime ?? createCrimeState(),
+        politics: saved.politics ?? createPoliticsState(),
+        religion: saved.religion ?? createReligionState(),
+        hobbies: saved.hobbies ?? [],
+        genetics: saved.genetics ?? null,
+        actionCooldowns: saved.actionCooldowns ?? [],
+        aileDurumu: saved.aileDurumu ?? "orta",
+        lifetimeScore: saved.lifetimeScore ?? 0,
+        decorations: saved.decorations ?? [],
+        currentEvent: getRandomEvent(ageGroup, saved.player.yas),
         notifications: [],
+        npcMemories: [],
         activeTab: "hayat",
         isDead: saved.player.durum === "oldu",
         isLoading: false,
@@ -220,7 +348,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const baslangicYili = options.dogumYili;
     const uid = userId ?? get().userId ?? "local-user";
     const life = createLife(uid, baslangicYili);
-    life.para = WEALTH_STARTING_MONEY[options.aileDurumu];
+    // Bebek/çocuk nakit tutmaz — aile durumu sadece harçlık ve ileride miras için
+    life.para = 0;
 
     const familyMembers = generateFamily({
       soyisim: options.soyisim.trim(),
@@ -239,7 +368,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       familyMembers.find((m) => m.rol === "baba" && m.isim === c.isim)
     );
 
-    const ozellikler = buildPersonalityFromFocus(options.kisilikOdagi);
+    const { genetics, ozellikler: inheritedBits } = inheritGenetics(
+      anne ?? null,
+      baba ?? null,
+      options.cinsiyet
+    );
+    const focused = buildPersonalityFromFocus(options.kisilikOdagi);
+    const ozellikler = {
+      ...focused,
+      saglik: Math.round((focused.saglik + inheritedBits.saglik) / 2),
+      zeka: Math.round((focused.zeka + inheritedBits.zeka) / 2),
+    };
     const difficultyHealth =
       options.zorluk === "kolay" ? 15 : options.zorluk === "zor" ? -10 : 0;
 
@@ -270,9 +409,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       sehir: options.sehir,
       ulke: "Türkiye",
       isPlayer: true,
-      sacRengi: options.sacRengi,
-      gozRengi: options.gozRengi,
-      tenRengi: options.tenRengi,
+      sacRengi: options.sacRengi || genetics.sacRengi,
+      gozRengi: options.gozRengi || genetics.gozRengi,
+      tenRengi: options.tenRengi || genetics.tenRengi,
+      boyPotansiyeli: genetics.boyPotansiyeli,
+      genetikOzet: `Anne %${genetics.ebeveynKatkisi.anne} / Baba %${genetics.ebeveynKatkisi.baba}`,
       zorluk: options.zorluk,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -295,12 +436,24 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
     });
 
+    const journal = addJournal(
+      [],
+      baslangicYili,
+      0,
+      "Doğum",
+      `${player.isim} ${player.soyisim}, ${options.sehir}'de dünyaya geldi.`,
+      "yasam"
+    );
+
+    // Aile birikimi bankada tutulur; oyuncu 18'de erişebilir (miras/ayrılma yoksa harçlık)
+    life.bankaBakiyesi = Math.floor(WEALTH_STARTING_MONEY[options.aileDurumu] * 0.35);
+
     set({
       life,
       player,
       family: familyChars,
       relationships,
-      currentEvent: getRandomEvent("bebek"),
+      currentEvent: getRandomEvent("bebek", 0),
       eventHistory: [],
       properties: [],
       investments: [],
@@ -309,10 +462,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
       notifications: addNotification(
         [],
-        `Hoş geldin ${player.isim} ${player.soyisim}! ${options.sehir}'de yeni bir hayat başlıyor.`
+        `Hoş geldin ${player.isim}! ${options.sehir}'de yeni bir hayat. Bebekken yatırım/para yönetimi yok.`
       ),
       npcMemories: [],
       decorations: [],
+      journal,
+      neighborhood: createNeighborhood(options.sehir),
+      school: null,
+      crime: createCrimeState(),
+      politics: createPoliticsState(),
+      religion: createReligionState(),
+      hobbies: [],
+      genetics,
+      actionCooldowns: [],
+      aileDurumu: options.aileDurumu,
+      lifetimeScore: 0,
       activeTab: "hayat",
       isDead: false,
       userId: uid,
@@ -343,22 +507,53 @@ export const useGameStore = create<GameState>((set, get) => ({
       updatedPlayer.egitim = edu as EducationLevel;
     }
 
-    if (updatedPlayer.meslek && updatedPlayer.meslek !== "Öğrenci" && updatedPlayer.meslek !== "Emekli") {
+    if (
+      updatedPlayer.meslek &&
+      updatedPlayer.meslek !== "Öğrenci" &&
+      updatedPlayer.meslek !== "Emekli" &&
+      canWork(newYas)
+    ) {
       updatedPlayer.gelir = calculateSalary(
         updatedPlayer.meslek,
         updatedPlayer.ozellikler.zeka,
-        newYas - 18
+        Math.max(0, newYas - 18)
       );
+    } else if (!canWork(newYas)) {
+      updatedPlayer.gelir = 0;
+      updatedPlayer.meslek = newYas < 6 ? null : "Öğrenci";
     }
 
     let updatedLife: Life = {
       ...life,
       mevcutYil: newYil,
-      para: life.para + (updatedPlayer.gelir ?? 0),
+      para: life.para + (canWork(newYas) ? updatedPlayer.gelir ?? 0 : 0),
       updatedAt: new Date().toISOString(),
     };
 
+    // Harçlık (çocuk/ergen) — yatırım değil
+    const pocket = getPocketMoney(newYas, state.aileDurumu);
+    if (pocket > 0) {
+      updatedLife.para += pocket;
+    }
+
+    // 18 yaş: aile birikiminin bir kısmına erişim (gerçekçi: tam servet değil)
+    if (newYas === 18 && life.bankaBakiyesi > 0) {
+      const transfer = Math.floor(life.bankaBakiyesi * 0.4);
+      updatedLife.para += transfer;
+      updatedLife.bankaBakiyesi = life.bankaBakiyesi - transfer;
+    }
+
     let notifications = state.notifications;
+    if (pocket > 0) {
+      notifications = addNotification(notifications, `Bu yıl ${pocket} TL harçlık aldın.`);
+    }
+    if (newYas === 18) {
+      notifications = addNotification(
+        notifications,
+        "18 yaşına girdin. Yatırım, kredi ve ev alma artık mümkün."
+      );
+    }
+
     let updatedMemories = state.npcMemories;
     const updatedFamily = family.map((npc) => {
       if (npc.durum === "oldu") return { ...npc, yas: npc.yas + 1 };
@@ -377,28 +572,68 @@ export const useGameStore = create<GameState>((set, get) => ({
       return result.character;
     });
 
-    let updatedInvestments = investments.map((inv) => ({
-      ...inv,
-      mevcutFiyat: simulateMarketPrice(inv.mevcutFiyat),
-    }));
+    // Yatırımlar sadece 18+ için fiyat güncellenir; çocuk portföyü olmamalı
+    let updatedInvestments = investments;
+    if (canInvest(newYas)) {
+      updatedInvestments = investments.map((inv) => ({
+        ...inv,
+        mevcutFiyat: simulateMarketPrice(inv.mevcutFiyat),
+      }));
+    }
 
-    let updatedLoans = loans.map((loan) => {
-      if (!loan.aktif) return loan;
-      const yillikOdeme = loan.aylikOdeme * 12;
-      const kalan = Math.max(0, loan.kalanBorc - yillikOdeme);
-      updatedLife.para -= yillikOdeme;
-      return { ...loan, kalanBorc: kalan, aktif: kalan > 0 };
-    });
+    let updatedLoans = loans;
+    if (canTakeLoan(newYas) || loans.some((l) => l.aktif)) {
+      updatedLoans = loans.map((loan) => {
+        if (!loan.aktif) return loan;
+        const yillikOdeme = loan.aylikOdeme * 12;
+        const kalan = Math.max(0, loan.kalanBorc - yillikOdeme);
+        updatedLife.para -= yillikOdeme;
+        return { ...loan, kalanBorc: kalan, aktif: kalan > 0 };
+      });
+    }
 
     updatedLife.krediBorcu = updatedLoans.reduce((s, l) => s + l.kalanBorc, 0);
 
-    // Şirket yıllık gelir
-    const companyIncome = state.companies.reduce((s, c) => s + c.gelir, 0);
-    updatedLife.para += companyIncome;
+    if (canStartCompany(newYas)) {
+      const companyIncome = state.companies.reduce((s, c) => s + c.gelir, 0);
+      updatedLife.para += companyIncome;
+    }
+
+    let neighborhood = state.neighborhood
+      ? neighborhoodYearTick(state.neighborhood)
+      : createNeighborhood(updatedPlayer.sehir);
+    if (neighborhood.sonOlay) {
+      notifications = addNotification(notifications, neighborhood.sonOlay);
+    }
+
+    let school = state.school;
+    if (newYas >= 6 && newYas <= 18) {
+      school = school ? schoolYearTick(school, updatedPlayer.ozellikler.zeka) : createSchoolState(newYas);
+    } else {
+      school = null;
+    }
+
+    let crime = releaseIfDue(state.crime);
+
+    let journal = state.journal;
+    if (newYas === 6) {
+      journal = addJournal(journal, newYil, newYas, "Okul başladı", "İlkokul yılları başladı.", "egitim");
+    }
+    if (newYas === 18) {
+      journal = addJournal(journal, newYil, newYas, "Reşit oldun", "Yasal yetişkinlik başladı.", "yasam");
+    }
 
     const dead = checkPlayerDeath(updatedPlayer);
     if (dead) {
       updatedPlayer = { ...updatedPlayer, durum: "oldu", saglik: 0 };
+      journal = addJournal(
+        journal,
+        newYil,
+        newYas,
+        "Vefat",
+        `${updatedPlayer.isim} hayata veda etti.`,
+        "yasam"
+      );
     }
 
     const beforeAchievements = state.achievements;
@@ -423,6 +658,33 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
+    const avgRel =
+      relationships.length === 0
+        ? 50
+        : relationships.reduce((s, r) => s + r.puan, 0) / relationships.length;
+    const score = calculateLifeScore({
+      player: updatedPlayer,
+      life: updatedLife,
+      properties: state.properties,
+      investments: updatedInvestments,
+      companies: state.companies,
+      achievements: updatedAchievements,
+      avgRelationship: avgRel,
+      neighborhoodItibar: neighborhood.itibar,
+      sabika: crime.sabika,
+    });
+
+    if (dead) {
+      submitScore({
+        isim: updatedPlayer.isim,
+        soyisim: updatedPlayer.soyisim,
+        sehir: updatedPlayer.sehir,
+        yas: updatedPlayer.yas,
+        skor: score.toplam,
+        yil: newYil,
+      });
+    }
+
     set({
       player: updatedPlayer,
       life: updatedLife,
@@ -431,7 +693,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       loans: updatedLoans,
       achievements: updatedAchievements,
       npcMemories: updatedMemories,
-      currentEvent: dead ? null : getRandomEvent(ageGroup),
+      neighborhood,
+      school,
+      crime,
+      journal,
+      lifetimeScore: score.toplam,
+      currentEvent: dead ? null : getRandomEvent(ageGroup, newYas),
       isDead: dead,
       notifications: dead
         ? addNotification(notifications, `${updatedPlayer.isim} ${updatedPlayer.yas} yaşında vefat etti.`, "uyari")
@@ -442,7 +709,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   selectChoice: (choiceId) => {
-    const { player, life, currentEvent, eventHistory, relationships } = get();
+    const { player, life, currentEvent, eventHistory, relationships, journal } = get();
     if (!player || !life || !currentEvent) return;
 
     const choice = currentEvent.secenekler.find((c) => c.id === choiceId);
@@ -465,7 +732,15 @@ export const useGameStore = create<GameState>((set, get) => ({
             updatedPlayer.stres = clamp(updatedPlayer.stres + effect.deger);
             break;
           case "para":
-            updatedLife.para += effect.deger;
+            // Bebek/çocuk büyük para kazanamaz
+            if (player.yas < 12 && Math.abs(effect.deger) > 200) break;
+            if (player.yas < 16 && effect.deger > 2000) break;
+            if (player.yas < 18 && effect.deger > 0 && ["finans", "kariyer"].includes(currentEvent.kategori)) {
+              // Küçük gerçekçi ödüller
+              updatedLife.para += Math.min(effect.deger, 500);
+            } else {
+              updatedLife.para += effect.deger;
+            }
             break;
           case "ozellik":
             if (effect.ozellik) {
@@ -501,12 +776,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
+    const updatedJournal = addJournal(
+      journal,
+      life.mevcutYil,
+      player.yas,
+      currentEvent.baslik,
+      choice.sonuc,
+      currentEvent.kategori
+    );
+
     set({
       player: updatedPlayer,
       life: updatedLife,
       relationships: updatedRelationships,
       currentEvent: null,
       eventHistory: [log, ...eventHistory],
+      journal: updatedJournal,
     });
 
     get().persist();
@@ -515,35 +800,55 @@ export const useGameStore = create<GameState>((set, get) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   relationshipAction: (targetId, action) => {
-    const { relationships, player, life, family, notifications, npcMemories } = get();
+    const { relationships, player, life, family, notifications, npcMemories, actionCooldowns } = get();
     if (!player || !life) return;
+
+    const allowed = checkActionAllowed(player.yas, targetId, action, life.mevcutYil, actionCooldowns);
+    if (!allowed.ok) {
+      set({ notifications: addNotification(notifications, allowed.reason ?? "Şu an yapılamaz.", "uyari") });
+      return;
+    }
 
     const rel = relationships.find((r) => r.targetId === targetId);
     if (!rel) return;
     const target = family.find((f) => f.id === targetId);
 
-    const result = applyRelationshipAction(rel, action);
+    const result = applyRelationshipAction(rel, action, player.yas);
+    if (result.delta === 0 && result.mesaj.includes("genç")) {
+      set({ notifications: addNotification(notifications, result.mesaj, "uyari") });
+      return;
+    }
+
     let updatedRels = relationships.map((r) =>
       r.id === rel.id
         ? {
             ...r,
             puan: result.puan,
-            tip: action === "evlilik" ? "es" as const : action === "sevgili" ? "sevgili" as const : r.tip,
+            tip:
+              action === "evlilik"
+                ? ("es" as const)
+                : action === "sevgili"
+                  ? ("sevgili" as const)
+                  : r.tip,
             romantik: action === "sevgili" || action === "evlilik" || r.romantik,
           }
         : r
     );
 
     let updatedFamily = [...family];
-    let updatedPlayer = { ...player, mutluluk: clamp(player.mutluluk + (result.puan - rel.puan) * 0.1) };
+    let updatedPlayer = {
+      ...player,
+      mutluluk: clamp(player.mutluluk + (result.delta) * 0.15),
+    };
     let newNotifications = addNotification(notifications, result.mesaj);
     let updatedMemories = [...npcMemories];
+    const updatedCooldowns = updateCooldowns(actionCooldowns, targetId, action, life.mevcutYil);
 
     if (target) {
       const memory = recordPlayerActionMemory(
         target.id,
         result.mesaj,
-        result.puan - rel.puan,
+        result.delta,
         life.mevcutYil,
         target
       );
@@ -574,15 +879,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       player: updatedPlayer,
       notifications: newNotifications,
       npcMemories: updatedMemories,
+      actionCooldowns: updatedCooldowns,
     });
     get().persist();
   },
 
   buyProperty: (propertyData) => {
-    const { life, properties, notifications } = get();
-    if (!life) return;
+    const { life, properties, notifications, player } = get();
+    if (!life || !player) return;
 
-    const cost = propertyData.satinAlindi ? propertyData.deger : propertyData.kira * 12;
+    if (propertyData.tip === "ev" && !canBuyHome(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "ev"), "uyari") });
+      return;
+    }
+    if (propertyData.tip === "arac" && !canBuyVehicle(player.yas, propertyData.aracTipi)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "arac"), "uyari") });
+      return;
+    }
+
+    const mult = cityCostMultiplier(player.sehir);
+    const cost = Math.floor(
+      (propertyData.satinAlindi ? propertyData.deger : propertyData.kira * 12) * mult
+    );
     if (life.para < cost) {
       set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
       return;
@@ -592,26 +910,30 @@ export const useGameStore = create<GameState>((set, get) => ({
       ...propertyData,
       id: createId(),
       lifeId: life.id,
-    };
-
-    const updatedLife = {
-      ...life,
-      para: life.para - cost,
-      evId: property.tip === "ev" ? property.id : life.evId,
-      aracId: property.tip === "arac" ? property.id : life.aracId,
+      deger: Math.floor(propertyData.deger * mult),
     };
 
     set({
-      life: updatedLife,
+      life: {
+        ...life,
+        para: life.para - cost,
+        evId: property.tip === "ev" ? property.id : life.evId,
+        aracId: property.tip === "arac" ? property.id : life.aracId,
+      },
       properties: [...properties, property],
-      notifications: addNotification(notifications, `${property.ad} satın alındı!`),
+      notifications: addNotification(notifications, `${property.ad} alındı.`),
     });
     get().persist();
   },
 
   buyInvestment: (tip, sembol, miktar, fiyat) => {
-    const { life, investments, notifications } = get();
-    if (!life) return;
+    const { life, investments, notifications, player } = get();
+    if (!life || !player) return;
+
+    if (!canInvest(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "yatirim"), "uyari") });
+      return;
+    }
 
     const cost = miktar * fiyat;
     if (life.para < cost) {
@@ -638,8 +960,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   takeLoan: (tutar, vadeYil) => {
-    const { life, loans, notifications } = get();
-    if (!life) return;
+    const { life, loans, notifications, player } = get();
+    if (!life || !player) return;
+
+    if (!canTakeLoan(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "kredi"), "uyari") });
+      return;
+    }
 
     const { aylikOdeme } = calculateLoanPayment(tutar, 15, vadeYil);
     const loan: Loan = {
@@ -664,7 +991,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startCompany: (ad, sektor) => {
     const { life, companies, player, notifications } = get();
-    if (!life || !player || player.yas < 18) return;
+    if (!life || !player) return;
+
+    if (!canStartCompany(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "sirket"), "uyari") });
+      return;
+    }
 
     const maliyet = 50000;
     if (life.para < maliyet) {
@@ -697,7 +1029,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!player || !life) return;
 
     const costs = { doktor: 500, dinlenme: 0, spor: 300, beslenme: 200 };
-    if (life.para < costs[tip]) {
+    // Çocuk doktor/beslenme aile karşılar gibi küçük maliyet
+    const cost = player.yas < 16 ? Math.floor(costs[tip] * 0.2) : costs[tip];
+    if (life.para < cost && tip !== "dinlenme") {
       set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
       return;
     }
@@ -712,7 +1046,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     set({
       player: { ...player, ...healing },
-      life: { ...life, para: life.para - costs[tip] },
+      life: { ...life, para: life.para - (tip === "dinlenme" ? 0 : cost) },
       notifications: addNotification(notifications, messages[tip]),
     });
     get().persist();
@@ -721,6 +1055,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   study: (seviye) => {
     const { player, notifications } = get();
     if (!player) return;
+
+    if ((seviye === "universite" || seviye === "yuksek_lisans" || seviye === "doktora") && !canStudyUniversity(player.yas)) {
+      set({ notifications: addNotification(notifications, "Üniversite için en az 17 yaşında olmalısın.", "uyari") });
+      return;
+    }
 
     set({
       player: {
@@ -738,9 +1077,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   findJob: (meslek) => {
     const { player, life, notifications } = get();
-    if (!player || !life || player.yas < 16) return;
+    if (!player || !life) return;
 
-    const maas = calculateSalary(meslek, player.ozellikler.zeka, player.yas - 18);
+    if (!canWork(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "is"), "uyari") });
+      return;
+    }
+
+    const maas = calculateSalary(meslek, player.ozellikler.zeka, Math.max(0, player.yas - 18));
 
     set({
       player: { ...player, meslek, gelir: maas },
@@ -750,11 +1094,25 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   continueAsChild: (childId) => {
-    const { family, player, life, relationships } = get();
+    const { family, player, life, relationships, properties, investments, companies, loans, journal } = get();
     if (!player || !life) return;
 
+    const isChild = relationships.some((r) => r.targetId === childId && r.tip === "cocuk");
     const child = family.find((c) => c.id === childId);
-    if (!child || child.durum === "oldu") return;
+    if (!child || child.durum === "oldu" || !isChild) {
+      set({
+        notifications: addNotification(get().notifications, "Sadece kendi çocuğunla devam edebilirsin.", "uyari"),
+      });
+      return;
+    }
+
+    // Miras: net varlıkların bir kısmı çocuğa geçer
+    const propertyValue = properties.reduce((s, p) => s + (p.satinAlindi ? p.deger : 0), 0);
+    const invValue = investments.reduce((s, i) => s + i.miktar * i.mevcutFiyat, 0);
+    const companyValue = companies.reduce((s, c) => s + c.deger, 0);
+    const net =
+      life.para + life.bankaBakiyesi + propertyValue + invValue + companyValue - life.krediBorcu;
+    const inheritance = Math.max(0, Math.floor(net * 0.55));
 
     const newPlayer: Character = {
       ...child,
@@ -764,21 +1122,52 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const updatedFamily = family
       .filter((c) => c.id !== childId)
-      .map((c) => (c.id === player.id ? { ...player, isPlayer: false } : c));
+      .map((c) => (c.id === player.id ? { ...player, isPlayer: false, durum: "oldu" as const } : c));
 
-    const childRels = relationships.map((r) =>
-      r.characterId === player.id
-        ? { ...r, characterId: childId }
-        : r
+    const childRels = relationships
+      .filter((r) => r.targetId !== childId)
+      .map((r) =>
+        r.characterId === player.id
+          ? { ...r, characterId: childId }
+          : r
+      );
+
+    const newLife: Life = {
+      ...life,
+      para: inheritance,
+      bankaBakiyesi: Math.floor(inheritance * 0.2),
+      krediBorcu: 0,
+      evId: null,
+      aracId: null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedJournal = addJournal(
+      journal,
+      life.mevcutYil,
+      newPlayer.yas,
+      "Miras",
+      `${player.isim}'den kalan mirasla ${newPlayer.isim} hayata devam ediyor.`,
+      "yasam"
     );
 
     set({
       player: newPlayer,
+      life: newLife,
       family: updatedFamily,
       relationships: childRels,
+      properties: [],
+      investments: [],
+      companies: [],
+      loans: [],
+      journal: updatedJournal,
+      school: createSchoolState(newPlayer.yas),
       isDead: false,
-      currentEvent: getRandomEvent(getAgeGroup(newPlayer.yas)),
-      notifications: addNotification([], `${newPlayer.isim} olarak hayata devam ediyorsun.`),
+      currentEvent: getRandomEvent(getAgeGroup(newPlayer.yas), newPlayer.yas),
+      notifications: addNotification(
+        [],
+        `${newPlayer.isim} olarak devam ediyorsun. Miras: ${inheritance.toLocaleString("tr-TR")} TL.`
+      ),
       activeTab: "hayat",
     });
     get().persist();
@@ -793,7 +1182,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!player || !life) return;
 
     const activity = SOCIAL_ACTIVITIES.find((a) => a.id === activityId);
-    if (!activity || player.yas < activity.minYas) return;
+    if (!activity || player.yas < activity.minYas) {
+      set({ notifications: addNotification(notifications, "Bu aktivite için yaşın uygun değil.", "uyari") });
+      return;
+    }
 
     if (life.para < activity.maliyet) {
       set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
@@ -818,6 +1210,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   payTax: () => {
     const { player, life, notifications } = get();
     if (!player || !life || !player.gelir) return;
+    if (!canAccessFinance(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "finans"), "uyari") });
+      return;
+    }
 
     const tax = calculateTax(player.gelir * 12);
     if (life.para < tax) {
@@ -833,8 +1229,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   hireEmployee: (companyId) => {
-    const { companies, life, notifications } = get();
-    if (!life) return;
+    const { companies, life, notifications, player } = get();
+    if (!life || !player || !canStartCompany(player.yas)) return;
 
     const company = companies.find((c) => c.id === companyId);
     if (!company) return;
@@ -862,6 +1258,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   buyDecoration: (decorationId) => {
     const { life, player, decorations, notifications } = get();
     if (!life || !player) return;
+    if (player.yas < 16) {
+      set({ notifications: addNotification(notifications, "Dekorasyon için en az 16 yaşında olmalısın.", "uyari") });
+      return;
+    }
 
     if (decorations.includes(decorationId)) {
       set({ notifications: addNotification(notifications, "Bu dekorasyon zaten var.", "uyari") });
@@ -885,16 +1285,181 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().persist();
   },
 
-  loadLocalGame: () => {
-    const saved = loadFromLocal();
+  helpNeighbor: (neighborId) => {
+    const { neighborhood, player, notifications } = get();
+    if (!neighborhood || !player || player.yas < 6) return;
+    const next = helpNeighborFn(neighborhood, neighborId);
+    set({
+      neighborhood: next,
+      player: { ...player, mutluluk: clamp(player.mutluluk + 2) },
+      notifications: addNotification(notifications, "Komşuna yardım ettin."),
+    });
+    get().persist();
+  },
+
+  schoolStudy: (hard) => {
+    const { school, player, notifications } = get();
+    if (!school || !player) return;
+    const next = hard ? studyHarder(school) : skipStudy(school);
+    set({
+      school: next,
+      player: hard
+        ? {
+            ...player,
+            stres: clamp(player.stres + 3),
+            ozellikler: { ...player.ozellikler, zeka: clamp(player.ozellikler.zeka + 1) },
+          }
+        : { ...player, mutluluk: clamp(player.mutluluk + 2) },
+      notifications: addNotification(
+        notifications,
+        hard ? "Bu yıl daha çok çalıştın." : "Dersleri biraz erteledin."
+      ),
+    });
+    get().persist();
+  },
+
+  attemptCrimeAction: (crimeId) => {
+    const { crime, player, life, notifications, neighborhood } = get();
+    if (!player || !life) return;
+    const result = attemptCrime(crime, crimeId, life.mevcutYil, player.yas);
+    set({
+      crime: result.state,
+      life: { ...life, para: life.para + result.paraDelta },
+      player: {
+        ...player,
+        stres: clamp(player.stres + (result.yakalandi ? 12 : 4)),
+        mutluluk: clamp(player.mutluluk + (result.yakalandi ? -8 : 2)),
+      },
+      neighborhood: neighborhood
+        ? {
+            ...neighborhood,
+            itibar: Math.max(0, neighborhood.itibar - (result.yakalandi ? 8 : 1)),
+          }
+        : neighborhood,
+      notifications: addNotification(notifications, result.mesaj, result.yakalandi ? "uyari" : "bilgi"),
+    });
+    get().persist();
+  },
+
+  setPoliticalLean: (lean) => {
+    const { politics } = get();
+    set({ politics: setLean(politics, lean) });
+    get().persist();
+  },
+
+  castVote: () => {
+    const { politics, player, life, notifications } = get();
+    if (!player || !life) return;
+    const result = vote(politics, life.mevcutYil, player.yas);
+    set({
+      politics: result.state,
+      notifications: addNotification(notifications, result.mesaj, result.mesaj.includes("18") ? "uyari" : "bilgi"),
+    });
+    get().persist();
+  },
+
+  joinPoliticalParty: () => {
+    const { politics, player, notifications } = get();
+    if (!player) return;
+    const result = joinParty(politics, player.yas);
+    set({
+      politics: result.state,
+      notifications: addNotification(notifications, result.mesaj),
+    });
+    get().persist();
+  },
+
+  setReligionBelief: (inanc) => {
+    set({ religion: setBelief(get().religion, inanc) });
+    get().persist();
+  },
+
+  setReligionPractice: (pratik) => {
+    set({ religion: setPractice(get().religion, pratik) });
+    get().persist();
+  },
+
+  worshipAction: () => {
+    const { religion, player, notifications } = get();
+    if (!player) return;
+    const result = worship(religion);
+    set({
+      religion: result.state,
+      player: {
+        ...player,
+        mutluluk: clamp(player.mutluluk + result.mutluluk),
+        stres: clamp(player.stres + result.stres),
+      },
+      notifications: addNotification(notifications, "İçsel bir dinginlik hissettin."),
+    });
+    get().persist();
+  },
+
+  startHobbyAction: (hobbyId) => {
+    const { hobbies, player, life, notifications } = get();
+    if (!player || !life) return;
+    const hobby = startHobby(hobbyId, player.yas);
+    if (!hobby) {
+      set({ notifications: addNotification(notifications, "Bu hobi için yaşın uygun değil.", "uyari") });
+      return;
+    }
+    if (life.para < hobby.maliyet) {
+      set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
+      return;
+    }
+    set({
+      hobbies: [...hobbies, hobby],
+      life: { ...life, para: life.para - hobby.maliyet },
+      notifications: addNotification(notifications, `${hobby.ad} hobisine başladın.`),
+    });
+    get().persist();
+  },
+
+  practiceHobbyAction: (hobbyId) => {
+    const { hobbies, player, notifications } = get();
+    if (!player) return;
+    const updated = hobbies.map((h) => (h.id === hobbyId ? practiceHobby(h) : h));
+    const hobby = updated.find((h) => h.id === hobbyId);
+    if (!hobby) return;
+    set({
+      hobbies: updated,
+      player: {
+        ...player,
+        mutluluk: clamp(player.mutluluk + hobby.mutluluk),
+        saglik: clamp(player.saglik + (hobby.saglik ?? 0)),
+        ozellikler: {
+          ...player.ozellikler,
+          zeka: clamp(player.ozellikler.zeka + (hobby.zeka ?? 0)),
+          sosyallik: clamp(player.ozellikler.sosyallik + (hobby.sosyallik ?? 0)),
+        },
+      },
+      notifications: addNotification(notifications, `${hobby.ad} çalıştın.`),
+    });
+    get().persist();
+  },
+
+  loadLocalGame: (slot) => {
+    const saved = loadFromLocal(slot);
     if (!saved) return false;
 
     const ageGroup = getAgeGroup(saved.player.yas);
     set({
+      ...defaultExtras(),
       ...saved,
+      journal: saved.journal ?? [],
+      neighborhood: saved.neighborhood ?? createNeighborhood(saved.player.sehir),
+      school: saved.school ?? createSchoolState(saved.player.yas),
+      crime: saved.crime ?? createCrimeState(),
+      politics: saved.politics ?? createPoliticsState(),
+      religion: saved.religion ?? createReligionState(),
+      hobbies: saved.hobbies ?? [],
+      genetics: saved.genetics ?? null,
+      actionCooldowns: saved.actionCooldowns ?? [],
+      aileDurumu: saved.aileDurumu ?? "orta",
+      lifetimeScore: saved.lifetimeScore ?? 0,
       decorations: saved.decorations ?? [],
       npcMemories: [],
-      currentEvent: getRandomEvent(ageGroup),
+      currentEvent: getRandomEvent(ageGroup, saved.player.yas),
       notifications: [],
       activeTab: "hayat",
       isDead: saved.player.durum === "oldu",
@@ -920,6 +1485,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       notifications: [],
       npcMemories: [],
       decorations: [],
+      ...defaultExtras(),
       activeTab: "hayat",
       isDead: false,
       error: null,
@@ -930,7 +1496,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (!state.life || !state.player) return;
 
-    const saveData = {
+    const saveData: SavedGameState = {
       life: state.life,
       player: state.player,
       family: state.family,
@@ -942,6 +1508,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       loans: state.loans,
       achievements: state.achievements,
       decorations: state.decorations,
+      journal: state.journal,
+      neighborhood: state.neighborhood ?? undefined,
+      school: state.school,
+      crime: state.crime,
+      politics: state.politics,
+      religion: state.religion,
+      hobbies: state.hobbies,
+      genetics: state.genetics,
+      actionCooldowns: state.actionCooldowns,
+      lifetimeScore: state.lifetimeScore,
+      aileDurumu: state.aileDurumu,
     };
 
     saveToLocal(saveData);
