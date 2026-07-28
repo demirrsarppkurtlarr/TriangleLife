@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useGameStore } from "@/store/game-store";
-import { EDUCATION_LABELS, PROFESSIONS } from "@/lib/constants";
+import { EDUCATION_LABELS } from "@/lib/constants";
 import { getAvailableProfessions } from "@/lib/systems/career";
 import { GraduationCap, Briefcase } from "lucide-react";
 import type { EducationLevel } from "@/types/game";
