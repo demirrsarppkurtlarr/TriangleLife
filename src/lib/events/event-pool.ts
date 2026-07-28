@@ -1,40 +1,76 @@
 import type { AgeGroup, GameEvent } from "@/types/game";
-import { generateProceduralEvents } from "@/lib/events/events-generated";
-import { realisticBaseEvents } from "@/lib/events/events-realistic";
+import { generateAgeExclusiveEvents } from "@/lib/events/events-by-age";
 
-const events: GameEvent[] = [
-  ...realisticBaseEvents,
-  ...generateProceduralEvents(600),
-];
+/** Tüm olaylar yaş bandına özel — başka yaşta asla çıkmaz */
+const events: GameEvent[] = generateAgeExclusiveEvents();
 
-export function getEventsForAgeGroup(ageGroup: AgeGroup, yas?: number): GameEvent[] {
+export function getEventsForAge(yas: number): GameEvent[] {
   return events.filter((e) => {
-    if (!e.yasGrubu.includes(ageGroup)) return false;
-    if (yas !== undefined) {
-      if (e.minYas !== undefined && yas < e.minYas) return false;
-      if (e.maxYas !== undefined && yas > e.maxYas) return false;
-    }
-    return true;
+    const min = e.minYas ?? 0;
+    const max = e.maxYas ?? 120;
+    return yas >= min && yas <= max;
   });
 }
 
-export function getRandomEvent(ageGroup: AgeGroup, yas?: number): GameEvent | null {
-  const available = getEventsForAgeGroup(ageGroup, yas);
-  if (available.length === 0) return null;
+export function getEventsForAgeGroup(ageGroup: AgeGroup, yas?: number): GameEvent[] {
+  if (yas !== undefined) return getEventsForAge(yas);
+  return events.filter((e) => e.yasGrubu.includes(ageGroup));
+}
 
+/** Son çıkan olayları tekrar etme — aynı yaşta bile çeşitlilik */
+export function getRandomEvent(
+  ageGroup: AgeGroup,
+  yas?: number,
+  recentIds: string[] = []
+): GameEvent | null {
+  const age = yas ?? ageGroupFallbackAge(ageGroup);
+  let available = getEventsForAge(age);
+
+  if (recentIds.length > 0) {
+    const fresh = available.filter((e) => !recentIds.includes(e.id) && !recentIds.includes(e.baslik));
+    if (fresh.length > 0) available = fresh;
+  }
+
+  if (available.length === 0) {
+    const fallback = events.filter((e) => e.yasGrubu.includes(ageGroup));
+    if (fallback.length === 0) return null;
+    return pickWeighted(fallback);
+  }
+  return pickWeighted(available);
+}
+
+function pickWeighted(available: GameEvent[]): GameEvent {
   const totalWeight = available.reduce((sum, e) => sum + e.oncelik, 0);
   let random = Math.random() * totalWeight;
-
   for (const event of available) {
     random -= event.oncelik;
     if (random <= 0) return event;
   }
-
   return available[0];
+}
+
+function ageGroupFallbackAge(ageGroup: AgeGroup): number {
+  const map: Record<AgeGroup, number> = {
+    bebek: 1,
+    cocuk: 4,
+    ilkokul: 9,
+    ergen: 15,
+    genc: 21,
+    yetiskin: 32,
+    orta_yas: 50,
+    yasli: 68,
+    ileri_yas: 85,
+  };
+  return map[ageGroup];
 }
 
 export function getAllEvents(): GameEvent[] {
   return events;
+}
+
+/** Debug / UI: bu yaşta kaç benzersiz olay var */
+export function countEventsForAge(yas: number): number {
+  return getEventsForAge(yas).length;
 }
 
 export const EVENT_CATEGORY_LABELS: Record<string, string> = {

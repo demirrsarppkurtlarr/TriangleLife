@@ -21,9 +21,18 @@ export function EventCard({ event, onSelectChoice }: EventCardProps) {
       <Card variant="elevated" padding="lg" className="max-w-2xl mx-auto">
         <div className="space-y-6">
           <div className="space-y-2">
-            <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-accent-muted text-accent">
-              {EVENT_CATEGORY_LABELS[event.kategori]}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-accent-muted text-accent">
+                {EVENT_CATEGORY_LABELS[event.kategori]}
+              </span>
+              {event.minYas !== undefined && event.maxYas !== undefined && (
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-medium bg-surface-overlay text-content-secondary">
+                  {event.minYas === event.maxYas
+                    ? `${event.minYas} yaş`
+                    : `${event.minYas}–${event.maxYas} yaş`}
+                </span>
+              )}
+            </div>
             <h2 className="font-display text-2xl font-bold text-content">
               {event.baslik}
             </h2>

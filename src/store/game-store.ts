@@ -329,7 +329,11 @@ export const useGameStore = create<GameState>((set, get) => ({
         aileDurumu: saved.aileDurumu ?? "orta",
         lifetimeScore: saved.lifetimeScore ?? 0,
         decorations: saved.decorations ?? [],
-        currentEvent: getRandomEvent(ageGroup, saved.player.yas),
+        currentEvent: getRandomEvent(
+          ageGroup,
+          saved.player.yas,
+          (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik)
+        ),
         notifications: [],
         npcMemories: [],
         activeTab: "hayat",
@@ -698,7 +702,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       crime,
       journal,
       lifetimeScore: score.toplam,
-      currentEvent: dead ? null : getRandomEvent(ageGroup, newYas),
+      currentEvent: dead
+        ? null
+        : getRandomEvent(
+            ageGroup,
+            newYas,
+            state.eventHistory.slice(0, 8).map((e) => e.baslik)
+          ),
       isDead: dead,
       notifications: dead
         ? addNotification(notifications, `${updatedPlayer.isim} ${updatedPlayer.yas} yaşında vefat etti.`, "uyari")
@@ -1163,7 +1173,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       journal: updatedJournal,
       school: createSchoolState(newPlayer.yas),
       isDead: false,
-      currentEvent: getRandomEvent(getAgeGroup(newPlayer.yas), newPlayer.yas),
+      currentEvent: getRandomEvent(
+        getAgeGroup(newPlayer.yas),
+        newPlayer.yas,
+        journal.slice(0, 5).map((j) => j.baslik)
+      ),
       notifications: addNotification(
         [],
         `${newPlayer.isim} olarak devam ediyorsun. Miras: ${inheritance.toLocaleString("tr-TR")} TL.`
@@ -1459,7 +1473,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       lifetimeScore: saved.lifetimeScore ?? 0,
       decorations: saved.decorations ?? [],
       npcMemories: [],
-      currentEvent: getRandomEvent(ageGroup, saved.player.yas),
+      currentEvent: getRandomEvent(
+        ageGroup,
+        saved.player.yas,
+        (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik)
+      ),
       notifications: [],
       activeTab: "hayat",
       isDead: saved.player.durum === "oldu",
