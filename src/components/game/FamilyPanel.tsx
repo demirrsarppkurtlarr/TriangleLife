@@ -40,6 +40,8 @@ export function FamilyPanel({ family, relationships }: FamilyPanelProps) {
                   </p>
                   <p className="text-xs text-content-muted">
                     {roleLabel} · {member.yas} yaş · {member.meslek}
+                    {member.sehir ? ` · ${member.sehir}` : ""}
+                    {member.durum === "oldu" ? " · Vefat" : ""}
                   </p>
                 </div>
                 {rel && (

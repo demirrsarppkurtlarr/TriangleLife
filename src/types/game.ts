@@ -236,4 +236,5 @@ export interface SavedGameState {
   companies: Company[];
   loans: Loan[];
   achievements: Achievement[];
+  decorations?: string[];
 }

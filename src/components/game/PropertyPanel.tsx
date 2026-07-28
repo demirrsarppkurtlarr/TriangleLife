@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useGameStore, VEHICLE_TYPES } from "@/store/game-store";
 import { formatMoney } from "@/lib/generators";
-import { Home, Car } from "lucide-react";
+import { DECORATION_CATALOG, DECORATION_CATEGORY_LABELS } from "@/lib/systems/decoration";
+import { Home, Car, Paintbrush } from "lucide-react";
 
 const HOMES = [
   { ad: "Stüdyo Daire", deger: 800000, kira: 8000 },
@@ -15,7 +16,7 @@ const HOMES = [
 ];
 
 export function PropertyPanel() {
-  const { properties, buyProperty } = useGameStore();
+  const { properties, decorations, buyProperty, buyDecoration } = useGameStore();
 
   return (
     <div className="space-y-4">
@@ -87,6 +88,51 @@ export function PropertyPanel() {
             );
           })}
         </div>
+      </Card>
+
+      <Card variant="glass" padding="md">
+        <div className="flex items-center gap-2 mb-4">
+          <Paintbrush size={20} className="text-accent" />
+          <h3 className="font-display text-lg font-semibold text-content">Ev Dekorasyonu</h3>
+        </div>
+        {(Object.keys(DECORATION_CATEGORY_LABELS) as Array<keyof typeof DECORATION_CATEGORY_LABELS>).map(
+          (kategori) => {
+            const items = DECORATION_CATALOG.filter((d) => d.kategori === kategori);
+            return (
+              <div key={kategori} className="mb-4 last:mb-0">
+                <p className="text-xs font-medium text-content-muted uppercase tracking-wide mb-2">
+                  {DECORATION_CATEGORY_LABELS[kategori]}
+                </p>
+                <div className="space-y-2">
+                  {items.map((item) => {
+                    const owned = decorations.includes(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-4 py-3"
+                      >
+                        <div>
+                          <p className="font-medium text-content">{item.ad}</p>
+                          <p className="text-xs text-content-muted">
+                            {formatMoney(item.fiyat)} · +{item.mutluluk} mutluluk
+                          </p>
+                        </div>
+                        <Button
+                          variant={owned ? "ghost" : "secondary"}
+                          size="sm"
+                          disabled={owned}
+                          onClick={() => buyDecoration(item.id)}
+                        >
+                          {owned ? "Sahip" : "Satın Al"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+        )}
       </Card>
 
       {properties.length > 0 && (

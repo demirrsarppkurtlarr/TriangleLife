@@ -69,6 +69,7 @@
 
   body {
     @apply bg-surface text-content font-sans;
+    font-size: clamp(0.95rem, 0.9rem + 0.2vw, 1.125rem);
   }
 
   ::selection {
@@ -80,5 +81,18 @@
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: rgb(var(--color-border) / var(--border-alpha)) transparent;
+  }
+}
+
+/* 4K / geniş ekran okunabilirlik */
+@media (min-width: 2560px) {
+  body {
+    font-size: 1.125rem;
+  }
+}
+
+@media (min-width: 3840px) {
+  body {
+    font-size: 1.25rem;
   }
 }

@@ -21,7 +21,7 @@ import { getRandomEvent } from "@/lib/events/event-pool";
 import { CITIES } from "@/lib/constants";
 import { applyHealthDecay, applyHealing } from "@/lib/systems/health";
 import { calculateLoanPayment, simulateMarketPrice, INVESTMENT_SYMBOLS } from "@/lib/systems/finance";
-import { applyRelationshipAction, simulateNpcLife } from "@/lib/systems/relationships";
+import { applyRelationshipAction } from "@/lib/systems/relationships";
 import { getEducationForAge, calculateSalary } from "@/lib/systems/career";
 import { DEFAULT_ACHIEVEMENTS, checkAchievements, getNewlyUnlocked } from "@/lib/systems/achievements";
 import { saveGameState, loadActiveLife, unlockAchievement } from "@/lib/supabase/game-service";
@@ -34,6 +34,12 @@ import {
   createSpouseRelationship,
   createChildRelationship,
 } from "@/lib/systems/npc-lifecycle";
+import {
+  simulateNpcYear,
+  recordPlayerActionMemory,
+  type NpcMemory,
+} from "@/lib/systems/npc-ai";
+import { DECORATION_CATALOG } from "@/lib/systems/decoration";
 
 interface GameState {
   life: Life | null;
@@ -48,6 +54,8 @@ interface GameState {
   loans: Loan[];
   achievements: Achievement[];
   notifications: GameNotification[];
+  npcMemories: NpcMemory[];
+  decorations: string[];
   activeTab: GameTab;
   isLoading: boolean;
   isSaving: boolean;
@@ -73,6 +81,7 @@ interface GameState {
   socialActivity: (activityId: string) => void;
   payTax: () => void;
   hireEmployee: (companyId: string) => void;
+  buyDecoration: (decorationId: string) => void;
   loadLocalGame: () => boolean;
   dismissNotification: (id: string) => void;
   resetGame: () => void;
@@ -171,6 +180,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   loans: [],
   achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
   notifications: [],
+  npcMemories: [],
+  decorations: [],
   activeTab: "hayat",
   isLoading: false,
   isSaving: false,
@@ -284,6 +295,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       loans: [],
       achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
       notifications: addNotification([], "Hayatına hoş geldin!"),
+      npcMemories: [],
+      decorations: [],
       activeTab: "hayat",
       isDead: false,
       userId: uid,
@@ -329,14 +342,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       updatedAt: new Date().toISOString(),
     };
 
-    let updatedFamily = family.map((npc) => {
-      const updates = simulateNpcLife(npc, newYil);
-      return {
-        ...npc,
-        yas: npc.yas + 1,
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      };
+    let notifications = state.notifications;
+    let updatedMemories = state.npcMemories;
+    const updatedFamily = family.map((npc) => {
+      if (npc.durum === "oldu") return { ...npc, yas: npc.yas + 1 };
+      const result = simulateNpcYear(
+        npc,
+        newYil,
+        updatedMemories.filter((m) => m.npcId === npc.id)
+      );
+      updatedMemories = [
+        ...updatedMemories.filter((m) => m.npcId !== npc.id),
+        ...result.memories,
+      ];
+      if (result.message) {
+        notifications = addNotification(notifications, result.message);
+      }
+      return result.character;
     });
 
     let updatedInvestments = investments.map((inv) => ({
@@ -353,6 +375,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
 
     updatedLife.krediBorcu = updatedLoans.reduce((s, l) => s + l.kalanBorc, 0);
+
+    // Şirket yıllık gelir
+    const companyIncome = state.companies.reduce((s, c) => s + c.gelir, 0);
+    updatedLife.para += companyIncome;
 
     const dead = checkPlayerDeath(updatedPlayer);
     if (dead) {
@@ -374,7 +400,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
 
     const newlyUnlocked = getNewlyUnlocked(beforeAchievements, updatedAchievements);
-    let notifications = state.notifications;
     for (const a of newlyUnlocked) {
       notifications = addNotification(notifications, `Başarım kazandın: ${a.ad}`, "basarim");
       if (state.userId && state.userId !== "local-user") {
@@ -389,6 +414,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       investments: updatedInvestments,
       loans: updatedLoans,
       achievements: updatedAchievements,
+      npcMemories: updatedMemories,
       currentEvent: dead ? null : getRandomEvent(ageGroup),
       isDead: dead,
       notifications: dead
@@ -473,11 +499,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   relationshipAction: (targetId, action) => {
-    const { relationships, player, life, family, notifications } = get();
+    const { relationships, player, life, family, notifications, npcMemories } = get();
     if (!player || !life) return;
 
     const rel = relationships.find((r) => r.targetId === targetId);
     if (!rel) return;
+    const target = family.find((f) => f.id === targetId);
 
     const result = applyRelationshipAction(rel, action);
     let updatedRels = relationships.map((r) =>
@@ -494,6 +521,18 @@ export const useGameStore = create<GameState>((set, get) => ({
     let updatedFamily = [...family];
     let updatedPlayer = { ...player, mutluluk: clamp(player.mutluluk + (result.puan - rel.puan) * 0.1) };
     let newNotifications = addNotification(notifications, result.mesaj);
+    let updatedMemories = [...npcMemories];
+
+    if (target) {
+      const memory = recordPlayerActionMemory(
+        target.id,
+        result.mesaj,
+        result.puan - rel.puan,
+        life.mevcutYil,
+        target
+      );
+      if (memory) updatedMemories = [...updatedMemories, memory];
+    }
 
     if (action === "evlilik" && player.yas >= 18) {
       const spouse = createSpouse(player, life);
@@ -518,6 +557,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       family: updatedFamily,
       player: updatedPlayer,
       notifications: newNotifications,
+      npcMemories: updatedMemories,
     });
     get().persist();
   },
@@ -803,6 +843,32 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().persist();
   },
 
+  buyDecoration: (decorationId) => {
+    const { life, player, decorations, notifications } = get();
+    if (!life || !player) return;
+
+    if (decorations.includes(decorationId)) {
+      set({ notifications: addNotification(notifications, "Bu dekorasyon zaten var.", "uyari") });
+      return;
+    }
+
+    const item = DECORATION_CATALOG.find((d) => d.id === decorationId);
+    if (!item) return;
+
+    if (life.para < item.fiyat) {
+      set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
+      return;
+    }
+
+    set({
+      life: { ...life, para: life.para - item.fiyat },
+      decorations: [...decorations, item.id],
+      player: { ...player, mutluluk: clamp(player.mutluluk + item.mutluluk) },
+      notifications: addNotification(notifications, item.aciklama),
+    });
+    get().persist();
+  },
+
   loadLocalGame: () => {
     const saved = loadFromLocal();
     if (!saved) return false;
@@ -810,6 +876,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const ageGroup = getAgeGroup(saved.player.yas);
     set({
       ...saved,
+      decorations: saved.decorations ?? [],
+      npcMemories: [],
       currentEvent: getRandomEvent(ageGroup),
       notifications: [],
       activeTab: "hayat",
@@ -834,6 +902,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       loans: [],
       achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
       notifications: [],
+      npcMemories: [],
+      decorations: [],
       activeTab: "hayat",
       isDead: false,
       error: null,
@@ -855,6 +925,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       companies: state.companies,
       loans: state.loans,
       achievements: state.achievements,
+      decorations: state.decorations,
     };
 
     saveToLocal(saveData);
