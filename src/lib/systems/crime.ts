@@ -13,6 +13,7 @@ export interface CrimeState {
   kayitlar: CrimeRecord[];
   sabika: number;
   tutuklu: boolean;
+  kalanCezaYil: number;
 }
 
 export const CRIME_OPTIONS = [
@@ -23,7 +24,7 @@ export const CRIME_OPTIONS = [
 ];
 
 export function createCrimeState(): CrimeState {
-  return { kayitlar: [], sabika: 0, tutuklu: false };
+  return { kayitlar: [], sabika: 0, tutuklu: false, kalanCezaYil: 0 };
 }
 
 export function attemptCrime(
@@ -38,7 +39,7 @@ export function attemptCrime(
     return { state, mesaj: `Bu eylem için en az ${opt.minYas} yaşında olmalısın.`, paraDelta: 0, yakalandi: false };
   }
   if (state.tutuklu) {
-    return { state, mesaj: "Şu an tutuklusun; yeni bir suç işleyemezsin.", paraDelta: 0, yakalandi: false };
+    return { state, mesaj: "Hapistesin; yeni bir suç işleyemezsin.", paraDelta: 0, yakalandi: false };
   }
 
   const yakalandi = Math.random() < opt.risk + state.sabika * 0.02;
@@ -61,21 +62,35 @@ export function attemptCrime(
   };
 
   const tutuklu = opt.siddet === "agir" || state.sabika >= 3;
+  const kalanCezaYil = tutuklu ? (opt.siddet === "agir" ? 2 + Math.floor(Math.random() * 2) : 1) : 0;
+
   return {
     state: {
       kayitlar: [kayit, ...state.kayitlar].slice(0, 20),
       sabika: state.sabika + 1,
       tutuklu,
+      kalanCezaYil: tutuklu ? Math.max(state.kalanCezaYil, kalanCezaYil) : state.kalanCezaYil,
     },
     mesaj: tutuklu
-      ? `Yakalandın ve tutuklandın. Ceza: ${opt.ceza.toLocaleString("tr-TR")} TL.`
+      ? `Yakalandın. ${kalanCezaYil} yıl hapis + ${opt.ceza.toLocaleString("tr-TR")} TL ceza.`
       : `Yakalandın. Ceza: ${opt.ceza.toLocaleString("tr-TR")} TL.`,
     paraDelta: -opt.ceza,
     yakalandi: true,
   };
 }
 
-export function releaseIfDue(state: CrimeState): CrimeState {
-  if (!state.tutuklu) return state;
-  return { ...state, tutuklu: false };
+/** Her yıl hapis süresi azalır */
+export function releaseIfDue(state: CrimeState): { state: CrimeState; mesaj?: string } {
+  if (!state.tutuklu) return { state };
+  const kalan = Math.max(0, (state.kalanCezaYil || 1) - 1);
+  if (kalan <= 0) {
+    return {
+      state: { ...state, tutuklu: false, kalanCezaYil: 0 },
+      mesaj: "Hapisten çıktın. Sabıkan kaldı.",
+    };
+  }
+  return {
+    state: { ...state, kalanCezaYil: kalan },
+    mesaj: `Hapistesin. Kalan süre: ${kalan} yıl.`,
+  };
 }

@@ -1,5 +1,6 @@
 import type { AgeGroup, GameEvent } from "@/types/game";
 import { generateAgeExclusiveEvents } from "@/lib/events/events-by-age";
+import { weightBoostForFlags, type StoryFlag } from "@/lib/systems/story-continuity";
 
 /** Tüm olaylar yaş bandına özel — başka yaşta asla çıkmaz */
 const events: GameEvent[] = generateAgeExclusiveEvents();
@@ -17,11 +18,12 @@ export function getEventsForAgeGroup(ageGroup: AgeGroup, yas?: number): GameEven
   return events.filter((e) => e.yasGrubu.includes(ageGroup));
 }
 
-/** Son çıkan olayları tekrar etme — aynı yaşta bile çeşitlilik */
+/** Son çıkan olayları tekrar etme + hikâye bayraklarına göre ağırlık */
 export function getRandomEvent(
   ageGroup: AgeGroup,
   yas?: number,
-  recentIds: string[] = []
+  recentIds: string[] = [],
+  flags: StoryFlag[] = []
 ): GameEvent | null {
   const age = yas ?? ageGroupFallbackAge(ageGroup);
   let available = getEventsForAge(age);
@@ -34,17 +36,18 @@ export function getRandomEvent(
   if (available.length === 0) {
     const fallback = events.filter((e) => e.yasGrubu.includes(ageGroup));
     if (fallback.length === 0) return null;
-    return pickWeighted(fallback);
+    return pickWeighted(fallback, flags);
   }
-  return pickWeighted(available);
+  return pickWeighted(available, flags);
 }
 
-function pickWeighted(available: GameEvent[]): GameEvent {
-  const totalWeight = available.reduce((sum, e) => sum + e.oncelik, 0);
+function pickWeighted(available: GameEvent[], flags: StoryFlag[] = []): GameEvent {
+  const weights = available.map((e) => Math.max(1, e.oncelik * weightBoostForFlags(e, flags)));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
   let random = Math.random() * totalWeight;
-  for (const event of available) {
-    random -= event.oncelik;
-    if (random <= 0) return event;
+  for (let i = 0; i < available.length; i++) {
+    random -= weights[i];
+    if (random <= 0) return available[i];
   }
   return available[0];
 }
@@ -68,7 +71,6 @@ export function getAllEvents(): GameEvent[] {
   return events;
 }
 
-/** Debug / UI: bu yaşta kaç benzersiz olay var */
 export function countEventsForAge(yas: number): number {
   return getEventsForAge(yas).length;
 }

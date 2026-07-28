@@ -15,6 +15,7 @@ import type {
   EducationLevel,
   JournalEntry,
   SavedGameState,
+  EventEffect,
 } from "@/types/game";
 import { getAgeGroup, VEHICLE_TYPES, CITIES } from "@/lib/constants";
 import { generateFamily, buildPersonalityFromFocus } from "@/lib/generators";
@@ -110,6 +111,50 @@ import {
   rollGigEarnings,
   resolveGamble,
 } from "@/lib/systems/money-makers";
+import {
+  createEmptyStoryState,
+  buildConsequencesFromChoice,
+  applyConsequenceSeeds,
+  tickStoryYear,
+  popDueFollowUp,
+  type StoryState,
+} from "@/lib/systems/story-continuity";
+import {
+  createEmptyLifeExtras,
+  canStartMilitary,
+  startMilitary,
+  tickMilitary,
+  setUniversityMajor,
+  advanceCareerTrack,
+  SAC_RENKLERI,
+  GOZ_RENKLERI,
+  TEN_RENKLERI,
+  UNIVERSITE_BOLUMLERI,
+  type LifeExtras,
+} from "@/lib/systems/life-extras";
+import {
+  adoptPet,
+  carePet,
+  tickPets,
+  PET_TYPES,
+  type Pet,
+} from "@/lib/systems/pets";
+import {
+  rollNewDisease,
+  tickDiseases,
+  treatDisease,
+  pickDeathCause,
+  type Disease,
+} from "@/lib/systems/diseases";
+import {
+  generateDatingCandidates,
+  canGetPregnant,
+  startPregnancy,
+  tickPregnancy,
+  attemptCheat,
+  type DatingCandidate,
+  type PregnancyState,
+} from "@/lib/systems/romance-depth";
 
 interface GigCooldown {
   gigId: string;
@@ -125,6 +170,12 @@ interface GameState {
   currentEvent: GameEvent | null;
   currentPrompt: LifePrompt | null;
   lifePromptHistory: string[];
+  storyState: StoryState;
+  lifeExtras: LifeExtras;
+  pets: Pet[];
+  diseases: Disease[];
+  pregnancy: PregnancyState | null;
+  datingCandidates: DatingCandidate[];
   eventHistory: EventLog[];
   properties: Property[];
   investments: Investment[];
@@ -186,6 +237,24 @@ interface GameState {
   worshipAction: () => void;
   startHobbyAction: (hobbyId: string) => void;
   practiceHobbyAction: (hobbyId: string) => void;
+  getDriversLicense: () => void;
+  moveCity: (sehir: string) => void;
+  startMilitaryService: () => void;
+  chooseUniversityMajor: (bolumId: string) => void;
+  advanceCareer: () => void;
+  adoptPetAction: (tur: Pet["tur"]) => void;
+  carePetAction: (petId: string) => void;
+  treatDiseaseAction: (diseaseId: string) => void;
+  therapyAction: () => void;
+  plasticSurgeryAction: () => void;
+  joinGym: () => void;
+  gymWorkout: () => void;
+  refreshDatingPool: () => void;
+  dateCandidate: (candidateId: string) => void;
+  cheatOnPartner: () => void;
+  tryPregnancy: () => void;
+  adoptChildAction: () => void;
+  renamePlayer: (isim: string, soyisim: string) => void;
   loadLocalGame: (slot?: number) => boolean;
   dismissNotification: (id: string) => void;
   resetGame: () => void;
@@ -301,7 +370,55 @@ function defaultExtras() {
     aileDurumu: "orta",
     lifetimeScore: 0,
     lifePromptHistory: [],
+    storyState: createEmptyStoryState(),
+    lifeExtras: createEmptyLifeExtras(),
+    pets: [] as Pet[],
+    diseases: [] as Disease[],
+    pregnancy: null as PregnancyState | null,
+    datingCandidates: [] as DatingCandidate[],
   };
+}
+
+function applyEventEffects(
+  player: Character,
+  life: Life,
+  effects: EventEffect[],
+  yas: number,
+  kategori?: string
+): { player: Character; life: Life } {
+  let updatedPlayer = { ...player, ozellikler: { ...player.ozellikler } };
+  let updatedLife = { ...life };
+  for (const effect of effects) {
+    switch (effect.tip) {
+      case "mutluluk":
+        updatedPlayer.mutluluk = clamp(updatedPlayer.mutluluk + effect.deger);
+        break;
+      case "saglik":
+        updatedPlayer.saglik = clamp(updatedPlayer.saglik + effect.deger);
+        break;
+      case "stres":
+        updatedPlayer.stres = clamp(updatedPlayer.stres + effect.deger);
+        break;
+      case "para":
+        if (yas < 12 && Math.abs(effect.deger) > 200) break;
+        if (yas < 16 && effect.deger > 2000) break;
+        if (yas < 18 && effect.deger > 0 && kategori && ["finans", "kariyer"].includes(kategori)) {
+          updatedLife.para += Math.min(effect.deger, 500);
+        } else {
+          updatedLife.para += effect.deger;
+        }
+        break;
+      case "ozellik":
+        if (effect.ozellik) {
+          updatedPlayer.ozellikler = {
+            ...updatedPlayer.ozellikler,
+            [effect.ozellik]: clamp(updatedPlayer.ozellikler[effect.ozellik] + effect.deger),
+          };
+        }
+        break;
+    }
+  }
+  return { player: updatedPlayer, life: updatedLife };
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -311,7 +428,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   relationships: [],
   currentEvent: null,
   currentPrompt: null,
-  lifePromptHistory: [],
   eventHistory: [],
   properties: [],
   investments: [],
@@ -346,7 +462,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         journal: saved.journal ?? [],
         neighborhood: saved.neighborhood ?? createNeighborhood(saved.player.sehir),
         school: saved.school ?? createSchoolState(saved.player.yas),
-        crime: saved.crime ?? createCrimeState(),
+        crime: {
+          ...(saved.crime ?? createCrimeState()),
+          kalanCezaYil: saved.crime?.kalanCezaYil ?? 0,
+        },
         politics: saved.politics ?? createPoliticsState(),
         religion: saved.religion ?? createReligionState(),
         hobbies: saved.hobbies ?? [],
@@ -355,11 +474,18 @@ export const useGameStore = create<GameState>((set, get) => ({
         aileDurumu: saved.aileDurumu ?? "orta",
         lifetimeScore: saved.lifetimeScore ?? 0,
         lifePromptHistory: saved.lifePromptHistory ?? [],
+        storyState: saved.storyState ?? createEmptyStoryState(),
+        lifeExtras: saved.lifeExtras ?? createEmptyLifeExtras(),
+        pets: saved.pets ?? [],
+        diseases: saved.diseases ?? [],
+        pregnancy: saved.pregnancy ?? null,
+        datingCandidates: saved.datingCandidates ?? [],
         decorations: saved.decorations ?? [],
         currentEvent: getRandomEvent(
           ageGroup,
           saved.player.yas,
-          (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik)
+          (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik),
+          (saved.storyState ?? createEmptyStoryState()).flags
         ),
         currentPrompt: null,
         notifications: [],
@@ -490,6 +616,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentEvent: getRandomEvent("bebek", 0),
       currentPrompt: null,
       lifePromptHistory: [],
+      storyState: createEmptyStoryState(),
       eventHistory: [],
       properties: [],
       investments: [],
@@ -515,6 +642,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       gigCooldowns: [],
       aileDurumu: options.aileDurumu,
       lifetimeScore: 0,
+      lifeExtras: createEmptyLifeExtras(),
+      pets: [],
+      diseases: [],
+      pregnancy: null,
+      datingCandidates: [],
       activeTab: "hayat",
       isDead: false,
       userId: uid,
@@ -685,7 +817,109 @@ export const useGameStore = create<GameState>((set, get) => ({
       school = null;
     }
 
-    let crime = releaseIfDue(state.crime);
+    let crimeRelease = releaseIfDue(state.crime);
+    let crime = crimeRelease.state;
+    if (crimeRelease.mesaj) {
+      notifications = addNotification(notifications, crimeRelease.mesaj, "uyari");
+    }
+
+    // Hapisteyken gelir yok, mutluluk düşer
+    if (crime.tutuklu) {
+      updatedPlayer.gelir = 0;
+      updatedPlayer.meslek = "Mahkûm";
+      updatedPlayer.mutluluk = clamp(updatedPlayer.mutluluk - 8);
+      updatedPlayer.stres = clamp(updatedPlayer.stres + 10);
+    }
+
+    // Askerlik tick
+    let lifeExtras = state.lifeExtras ?? createEmptyLifeExtras();
+    const mil = tickMilitary(lifeExtras);
+    lifeExtras = mil.extras;
+    if (mil.mesaj) notifications = addNotification(notifications, mil.mesaj, "yasam");
+    if (lifeExtras.askerlik?.durum === "aktif") {
+      updatedPlayer.gelir = 9000;
+      updatedPlayer.meslek = "Asker";
+      updatedPlayer.stres = clamp(updatedPlayer.stres + 4);
+    }
+
+    // Hastalıklar
+    let diseases = state.diseases ?? [];
+    const disTick = tickDiseases(diseases);
+    diseases = disTick.diseases;
+    updatedPlayer.saglik = clamp(updatedPlayer.saglik + disTick.saglik);
+    updatedPlayer.mutluluk = clamp(updatedPlayer.mutluluk + disTick.mutluluk);
+    updatedPlayer.stres = clamp(updatedPlayer.stres + disTick.stres);
+    for (const m of disTick.mesajlar) notifications = addNotification(notifications, m);
+    const newDis = rollNewDisease(newYas, diseases);
+    if (newDis) {
+      diseases = [newDis, ...diseases];
+      notifications = addNotification(notifications, `Teşhis: ${newDis.ad}`, "uyari");
+      journal = addJournal(journal, newYil, newYas, "Hastalık", `${newDis.ad} teşhisi kondu.`, "saglik");
+    }
+
+    // Evcil hayvanlar
+    let pets = state.pets ?? [];
+    const petTick = tickPets(pets, newYil);
+    pets = petTick.pets;
+    updatedPlayer.mutluluk = clamp(updatedPlayer.mutluluk + petTick.mutlulukDelta);
+    for (const m of petTick.mesajlar) notifications = addNotification(notifications, m, "yasam");
+
+    // Hamilelik
+    let pregnancy = state.pregnancy ?? null;
+    const pregTick = tickPregnancy(pregnancy);
+    pregnancy = pregTick.pregnancy;
+    if (pregTick.dogum) {
+      const spouse =
+        updatedFamily.find((f) => f.id === updatedPlayer.esId) ??
+        updatedFamily.find((f) =>
+          updatedRelationships.some((r) => r.targetId === f.id && (r.tip === "es" || r.tip === "sevgili"))
+        ) ??
+        null;
+      const child = createChild(updatedPlayer, spouse, updatedLife);
+      updatedFamily = [...updatedFamily, child];
+      updatedRelationships = [
+        ...updatedRelationships,
+        createChildRelationship(updatedPlayer, child, updatedLife),
+      ];
+      notifications = addNotification(notifications, `${child.isim} dünyaya geldi!`, "yasam");
+      journal = addJournal(journal, newYil, newYas, "Doğum", `${child.isim} doğdu.`, "aile");
+      lifeExtras = { ...lifeExtras, un: Math.min(100, lifeExtras.un + 1) };
+    }
+
+    // Gym üyeliği yıllık ücret
+    if (lifeExtras.gymUyelik && !crime.tutuklu) {
+      updatedLife.para -= 2400;
+      updatedPlayer.saglik = clamp(updatedPlayer.saglik + 2);
+    }
+
+    // Kariyer yolu: her 3 yılda otomatik ilerleme şansı
+    if (
+      lifeExtras.kariyerYolu &&
+      !crime.tutuklu &&
+      lifeExtras.askerlik?.durum !== "aktif" &&
+      newYas % 3 === 0 &&
+      Math.random() < 0.45
+    ) {
+      const adv = advanceCareerTrack(lifeExtras);
+      lifeExtras = adv.extras;
+      if (adv.yeniMeslek) {
+        updatedPlayer.meslek = adv.yeniMeslek;
+        updatedPlayer.gelir = calculateSalary(
+          adv.yeniMeslek,
+          updatedPlayer.ozellikler.zeka,
+          Math.max(0, newYas - 18),
+          lifeExtras.un
+        );
+        if (adv.mesaj) notifications = addNotification(notifications, adv.mesaj, "yasam");
+        if (["Ünlü Oyuncu", "Süperstar", "Milli Sporcu", "Efsane Sporcu", "CEO"].includes(adv.yeniMeslek)) {
+          lifeExtras = { ...lifeExtras, un: Math.min(100, lifeExtras.un + 8) };
+        }
+      }
+    }
+
+    updatedPlayer.ehliyet = lifeExtras.ehliyet;
+    updatedPlayer.un = lifeExtras.un;
+    updatedPlayer.universiteBolumu = lifeExtras.universiteBolumu ?? undefined;
 
     if (newYas === 6) {
       journal = addJournal(journal, newYil, newYas, "Okul başladı", "İlkokul yılları başladı.", "egitim");
@@ -696,13 +930,19 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const dead = checkPlayerDeath(updatedPlayer);
     if (dead) {
-      updatedPlayer = { ...updatedPlayer, durum: "oldu", saglik: 0 };
+      const cause = pickDeathCause(newYas, diseases, updatedPlayer.saglik);
+      updatedPlayer = {
+        ...updatedPlayer,
+        durum: "oldu",
+        saglik: 0,
+        olumNedeni: cause,
+      };
       journal = addJournal(
         journal,
         newYil,
         newYas,
         "Vefat",
-        `${updatedPlayer.isim} hayata veda etti.`,
+        `${updatedPlayer.isim} hayata veda etti. Sebep: ${cause}.`,
         "yasam"
       );
     }
@@ -756,28 +996,49 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     }
 
-    // BitLife tarzı: önce yaşam pop-up, yoksa rastgele olay — her yıl bir şey olur
+    // Hikâye sürekliliği: bayraklar yıllık yan etki üretir
+    let storyState = state.storyState ?? createEmptyStoryState();
+    const storyTick = tickStoryYear(storyState, newYil);
+    storyState = storyTick.state;
+    if (storyTick.yillikEtkiler.length > 0) {
+      const applied = applyEventEffects(updatedPlayer, updatedLife, storyTick.yillikEtkiler, newYas);
+      updatedPlayer = applied.player;
+      updatedLife = applied.life;
+    }
+    for (const msg of storyTick.mesajlar) {
+      notifications = addNotification(notifications, msg, "yasam");
+    }
+
+    // Önce zincir olay (geçmiş seçim), sonra yaşam pop-up, yoksa rastgele
     let nextPrompt: LifePrompt | null = null;
     let nextEvent: GameEvent | null = null;
     let promptHistory = state.lifePromptHistory;
 
     if (!dead) {
-      nextPrompt = pickLifePrompt({
-        player: updatedPlayer,
-        life: updatedLife,
-        properties: state.properties,
-        relationships: updatedRelationships,
-        family: updatedFamily,
-        aileDurumu: state.aileDurumu,
-        triggeredIds: promptHistory,
-      });
-      if (nextPrompt) {
-        promptHistory = [...promptHistory, nextPrompt.id].slice(-40);
-        notifications = addNotification(notifications, nextPrompt.baslik, "yasam");
+      const follow = popDueFollowUp(storyState, newYil, newYas);
+      storyState = follow.state;
+      if (follow.event) {
+        nextEvent = follow.event;
+        notifications = addNotification(notifications, `Devam: ${follow.event.baslik}`, "yasam");
       } else {
-        nextEvent =
-          getRandomEvent(ageGroup, newYas, state.eventHistory.slice(0, 8).map((e) => e.baslik)) ??
-          getRandomEvent(ageGroup, newYas);
+        nextPrompt = pickLifePrompt({
+          player: updatedPlayer,
+          life: updatedLife,
+          properties: state.properties,
+          relationships: updatedRelationships,
+          family: updatedFamily,
+          aileDurumu: state.aileDurumu,
+          triggeredIds: promptHistory,
+        });
+        if (nextPrompt) {
+          promptHistory = [...promptHistory, nextPrompt.id].slice(-40);
+          notifications = addNotification(notifications, nextPrompt.baslik, "yasam");
+        } else {
+          const recent = state.eventHistory.slice(0, 8).map((e) => e.baslik);
+          nextEvent =
+            getRandomEvent(ageGroup, newYas, recent, storyState.flags) ??
+            getRandomEvent(ageGroup, newYas, [], storyState.flags);
+        }
       }
     }
 
@@ -794,6 +1055,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       school,
       crime,
       journal,
+      storyState,
+      lifeExtras,
+      pets,
+      diseases,
+      pregnancy,
       lifetimeScore: score.toplam,
       currentEvent: nextEvent,
       currentPrompt: nextPrompt,
@@ -802,14 +1068,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       notifications: dead
         ? addNotification(notifications, `${updatedPlayer.isim} ${updatedPlayer.yas} yaşında vefat etti.`, "uyari")
         : notifications,
-      activeTab: nextPrompt ? "hayat" : state.activeTab,
+      activeTab: nextPrompt || nextEvent ? "hayat" : state.activeTab,
     });
 
     get().persist();
   },
 
   selectChoice: (choiceId) => {
-    const { player, life, currentEvent, eventHistory, relationships, journal } = get();
+    const state = get();
+    const { player, life, currentEvent, eventHistory, relationships, journal } = state;
     if (!player || !life || !currentEvent) return;
 
     const choice = currentEvent.secenekler.find((c) => c.id === choiceId);
@@ -818,49 +1085,51 @@ export const useGameStore = create<GameState>((set, get) => ({
     let updatedPlayer = { ...player };
     let updatedLife = { ...life };
     let updatedRelationships = [...relationships];
+    let notifications = state.notifications;
 
     if (choice.etkiler) {
+      const applied = applyEventEffects(
+        updatedPlayer,
+        updatedLife,
+        choice.etkiler,
+        player.yas,
+        currentEvent.kategori
+      );
+      updatedPlayer = applied.player;
+      updatedLife = applied.life;
       for (const effect of choice.etkiler) {
-        switch (effect.tip) {
-          case "mutluluk":
-            updatedPlayer.mutluluk = clamp(updatedPlayer.mutluluk + effect.deger);
-            break;
-          case "saglik":
-            updatedPlayer.saglik = clamp(updatedPlayer.saglik + effect.deger);
-            break;
-          case "stres":
-            updatedPlayer.stres = clamp(updatedPlayer.stres + effect.deger);
-            break;
-          case "para":
-            // Bebek/çocuk büyük para kazanamaz
-            if (player.yas < 12 && Math.abs(effect.deger) > 200) break;
-            if (player.yas < 16 && effect.deger > 2000) break;
-            if (player.yas < 18 && effect.deger > 0 && ["finans", "kariyer"].includes(currentEvent.kategori)) {
-              // Küçük gerçekçi ödüller
-              updatedLife.para += Math.min(effect.deger, 500);
-            } else {
-              updatedLife.para += effect.deger;
+        if (effect.tip === "iliski" && effect.hedefId) {
+          updatedRelationships = updatedRelationships.map((r) =>
+            r.targetId === effect.hedefId
+              ? { ...r, puan: clamp(r.puan + effect.deger) }
+              : r
+          );
+        }
+      }
+    }
+
+    // Seçimin yan etkileri — sonraki yıllarda geri döner
+    let storyState = state.storyState ?? createEmptyStoryState();
+    const seeds = buildConsequencesFromChoice(
+      currentEvent,
+      choice,
+      player.yas,
+      life.mevcutYil
+    );
+    if (seeds.length > 0) {
+      const appliedSeeds = applyConsequenceSeeds(storyState, seeds, life.mevcutYil);
+      storyState = appliedSeeds.state;
+      for (const msg of appliedSeeds.bildirimler) {
+        notifications = addNotification(notifications, msg, "yasam");
+      }
+      for (const seed of seeds) {
+        if (seed.aileIliskiDelta) {
+          updatedRelationships = updatedRelationships.map((r) => {
+            if (["anne", "baba", "kardes", "akraba"].includes(r.tip)) {
+              return { ...r, puan: clamp(r.puan + seed.aileIliskiDelta!) };
             }
-            break;
-          case "ozellik":
-            if (effect.ozellik) {
-              updatedPlayer.ozellikler = {
-                ...updatedPlayer.ozellikler,
-                [effect.ozellik]: clamp(
-                  updatedPlayer.ozellikler[effect.ozellik] + effect.deger
-                ),
-              };
-            }
-            break;
-          case "iliski":
-            if (effect.hedefId) {
-              updatedRelationships = updatedRelationships.map((r) =>
-                r.targetId === effect.hedefId
-                  ? { ...r, puan: clamp(r.puan + effect.deger) }
-                  : r
-              );
-            }
-            break;
+            return r;
+          });
         }
       }
     }
@@ -876,7 +1145,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
 
-    const updatedJournal = addJournal(
+    let updatedJournal = addJournal(
       journal,
       life.mevcutYil,
       player.yas,
@@ -885,6 +1154,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentEvent.kategori
     );
 
+    if (seeds.length > 0) {
+      const flagLabels = storyState.flags.map((f) => f.label).slice(0, 3).join(", ");
+      updatedJournal = addJournal(
+        updatedJournal,
+        life.mevcutYil,
+        player.yas,
+        "Yan etkiler",
+        flagLabels
+          ? `Bu seçimin gölgesi devam ediyor: ${flagLabels}.`
+          : "Bu seçimin sonuçları ileride geri dönebilir.",
+        "yasam"
+      );
+    }
+
     set({
       player: updatedPlayer,
       life: updatedLife,
@@ -892,13 +1175,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentEvent: null,
       eventHistory: [log, ...eventHistory],
       journal: updatedJournal,
+      storyState,
+      notifications,
     });
 
     get().persist();
   },
 
   resolvePrompt: (choiceId) => {
-    const { player, life, currentPrompt, journal, notifications, eventHistory } = get();
+    const state = get();
+    const { player, life, currentPrompt, journal, notifications, eventHistory } = state;
     if (!player || !life || !currentPrompt) return;
 
     const choice = currentPrompt.secenekler.find((c) => c.id === choiceId);
@@ -906,6 +1192,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     let updatedPlayer = { ...player };
     let updatedLife = { ...life };
+    let lifeExtras = state.lifeExtras ?? createEmptyLifeExtras();
 
     if (choice.etkiler) {
       for (const effect of choice.etkiler) {
@@ -940,14 +1227,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     if (choice.eylem === "ise_basla") {
       updatedPlayer.meslek = updatedPlayer.meslek === "Öğrenci" || !updatedPlayer.meslek ? "Satış Temsilcisi" : updatedPlayer.meslek;
-      updatedPlayer.gelir = calculateSalary(updatedPlayer.meslek, updatedPlayer.ozellikler.zeka, Math.max(0, player.yas - 18));
+      updatedPlayer.gelir = calculateSalary(updatedPlayer.meslek, updatedPlayer.ozellikler.zeka, Math.max(0, player.yas - 18), lifeExtras.un);
     }
     if (choice.eylem === "emekli_ol") {
       updatedPlayer.meslek = "Emekli";
       updatedPlayer.gelir = Math.max(8000, Math.round((updatedPlayer.gelir || 15000) * 0.55));
     }
     if (choice.eylem === "ehliyet") {
-      // sadece log
+      lifeExtras = { ...lifeExtras, ehliyet: true };
+      updatedPlayer.ehliyet = true;
     }
 
     const log: EventLog = {
@@ -984,6 +1272,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       player: updatedPlayer,
       life: updatedLife,
+      lifeExtras,
       currentPrompt: null,
       currentEvent: null,
       eventHistory: [log, ...eventHistory],
@@ -1062,12 +1351,39 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     if (action === "cocuk" && player.yas >= 18) {
-      const spouse = updatedFamily.find((f) => f.id === player.esId);
-      const child = createChild(player, spouse ?? null, life);
-      const childRel = createChildRelationship(player, child, life);
-      updatedFamily.push(child);
-      updatedRels.push(childRel);
-      newNotifications = addNotification(newNotifications, `${child.isim} doğdu!`, "basarim");
+      const extras = get();
+      if (extras.pregnancy) {
+        newNotifications = addNotification(newNotifications, "Zaten bir hamilelik süreci var.", "uyari");
+      } else {
+        const spouse = updatedFamily.find((f) => f.id === player.esId);
+        const partnerRel = updatedRels.find((r) => r.tip === "es" || r.tip === "sevgili");
+        const partner =
+          spouse ??
+          updatedFamily.find((f) => f.id === partnerRel?.targetId) ??
+          null;
+        if (!partner) {
+          newNotifications = addNotification(newNotifications, "Çocuk için partner gerekli.", "uyari");
+        } else if (!canGetPregnant(player.yas, true, false) && player.cinsiyet === "erkek" && partner.cinsiyet === "erkek") {
+          // same-sex: adoption style instant via try later
+          const child = createChild(player, partner, life);
+          const childRel = createChildRelationship(player, child, life);
+          updatedFamily.push(child);
+          updatedRels.push(childRel);
+          newNotifications = addNotification(newNotifications, `${child.isim} (evlat edinme/doğum) ailenize katıldı!`, "basarim");
+        } else {
+          set({
+            pregnancy: startPregnancy(partner.id, partner.isim),
+            relationships: updatedRels,
+            family: updatedFamily,
+            player: updatedPlayer,
+            notifications: addNotification(newNotifications, `Hamilelik başladı (${partner.isim}). Doğum gelecek yıl.`, "yasam"),
+            npcMemories: updatedMemories,
+            actionCooldowns: updatedCooldowns,
+          });
+          get().persist();
+          return;
+        }
+      }
     }
 
     set({
@@ -1082,16 +1398,28 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   buyProperty: (propertyData) => {
-    const { life, properties, notifications, player } = get();
+    const { life, properties, notifications, player, lifeExtras } = get();
     if (!life || !player) return;
 
     if (propertyData.tip === "ev" && !canBuyHome(player.yas)) {
       set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "ev"), "uyari") });
       return;
     }
-    if (propertyData.tip === "arac" && !canBuyVehicle(player.yas, propertyData.aracTipi)) {
-      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "arac"), "uyari") });
-      return;
+    if (propertyData.tip === "arac") {
+      if (!canBuyVehicle(player.yas, propertyData.aracTipi)) {
+        set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "arac"), "uyari") });
+        return;
+      }
+      if (!(lifeExtras?.ehliyet || player.ehliyet)) {
+        set({
+          notifications: addNotification(
+            notifications,
+            "Araç almak için ehliyetin olmalı. Yaşam sekmesinden ehliyet al.",
+            "uyari"
+          ),
+        });
+        return;
+      }
     }
 
     const mult = cityCostMultiplier(player.sehir);
@@ -1273,15 +1601,23 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   findJob: (meslek) => {
-    const { player, life, notifications } = get();
+    const { player, life, notifications, lifeExtras, crime } = get();
     if (!player || !life) return;
 
+    if (crime.tutuklu) {
+      set({ notifications: addNotification(notifications, "Hapisteyken işe giremezsin.", "uyari") });
+      return;
+    }
+    if (lifeExtras.askerlik?.durum === "aktif") {
+      set({ notifications: addNotification(notifications, "Askerdeyken sivil işe giremezsin.", "uyari") });
+      return;
+    }
     if (!canWork(player.yas)) {
       set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "is"), "uyari") });
       return;
     }
 
-    const maas = calculateSalary(meslek, player.ozellikler.zeka, Math.max(0, player.yas - 18));
+    const maas = calculateSalary(meslek, player.ozellikler.zeka, Math.max(0, player.yas - 18), lifeExtras.un);
 
     set({
       player: { ...player, meslek, gelir: maas },
@@ -1359,6 +1695,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       loans: [],
       journal: updatedJournal,
       school: createSchoolState(newPlayer.yas),
+      storyState: createEmptyStoryState(),
+      lifePromptHistory: [],
+      lifeExtras: createEmptyLifeExtras(),
+      pets: [],
+      diseases: [],
+      pregnancy: null,
+      datingCandidates: [],
       isDead: false,
       currentEvent: getRandomEvent(
         getAgeGroup(newPlayer.yas),
@@ -1757,6 +2100,468 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().persist();
   },
 
+  getDriversLicense: () => {
+    const { player, life, lifeExtras, notifications, crime } = get();
+    if (!player || !life) return;
+    if (crime.tutuklu) {
+      set({ notifications: addNotification(notifications, "Hapisteyken ehliyet alamazsın.", "uyari") });
+      return;
+    }
+    if (player.yas < 18) {
+      set({ notifications: addNotification(notifications, "Ehliyet için en az 18 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    if (lifeExtras.ehliyet) {
+      set({ notifications: addNotification(notifications, "Zaten ehliyetin var.") });
+      return;
+    }
+    if (life.para < 3500) {
+      set({ notifications: addNotification(notifications, "Ehliyet kursu 3500 TL tutuyor.", "uyari") });
+      return;
+    }
+    set({
+      life: { ...life, para: life.para - 3500 },
+      lifeExtras: { ...lifeExtras, ehliyet: true },
+      player: { ...player, ehliyet: true },
+      notifications: addNotification(notifications, "Ehliyetini aldın!", "yasam"),
+    });
+    get().persist();
+  },
+
+  moveCity: (sehir) => {
+    const { player, life, lifeExtras, notifications, crime } = get();
+    if (!player || !life) return;
+    if (crime.tutuklu || lifeExtras.askerlik?.durum === "aktif") {
+      set({ notifications: addNotification(notifications, "Şu an taşınamazsın.", "uyari") });
+      return;
+    }
+    if (player.yas < 16) {
+      set({ notifications: addNotification(notifications, "Tek başına taşınmak için en az 16 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    if (player.sehir === sehir) return;
+    const cost = 8000 + Math.floor(cityCostMultiplier(sehir) * 4000);
+    if (life.para < cost) {
+      set({ notifications: addNotification(notifications, `Taşınma maliyeti: ${cost.toLocaleString("tr-TR")} TL`, "uyari") });
+      return;
+    }
+    set({
+      player: { ...player, sehir },
+      life: { ...life, para: life.para - cost },
+      neighborhood: createNeighborhood(sehir),
+      notifications: addNotification(notifications, `${sehir}'e taşındın.`, "yasam"),
+    });
+    get().persist();
+  },
+
+  startMilitaryService: () => {
+    const { player, lifeExtras, notifications, crime, life } = get();
+    if (!player || !life) return;
+    if (crime.tutuklu) {
+      set({ notifications: addNotification(notifications, "Hapisteyken askere gidemezsin.", "uyari") });
+      return;
+    }
+    if (!canStartMilitary(player.yas, player.cinsiyet, lifeExtras)) {
+      set({ notifications: addNotification(notifications, "Askerlik için uygun değilsin veya tamamladın.", "uyari") });
+      return;
+    }
+    set({
+      lifeExtras: startMilitary(lifeExtras, life.mevcutYil),
+      player: { ...player, meslek: "Asker", gelir: 9000 },
+      notifications: addNotification(notifications, "Askerlik hizmetin başladı.", "yasam"),
+    });
+    get().persist();
+  },
+
+  chooseUniversityMajor: (bolumId) => {
+    const { player, lifeExtras, notifications } = get();
+    if (!player) return;
+    if (player.yas < 17) {
+      set({ notifications: addNotification(notifications, "Bölüm seçmek için en az 17 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    const next = setUniversityMajor(lifeExtras, bolumId);
+    const bolum = UNIVERSITE_BOLUMLERI.find((b) => b.id === bolumId);
+    set({
+      lifeExtras: next,
+      player: {
+        ...player,
+        egitim: ["universite", "yuksek_lisans", "doktora"].includes(player.egitim)
+          ? player.egitim
+          : "universite",
+        universiteBolumu: next.universiteBolumu ?? undefined,
+        meslek: bolum?.kariyer[0] ?? player.meslek,
+        gelir: bolum
+          ? calculateSalary(bolum.kariyer[0], player.ozellikler.zeka, 0, next.un)
+          : player.gelir,
+      },
+      notifications: addNotification(notifications, `${next.universiteBolumu} bölümünü seçtin.`, "yasam"),
+    });
+    get().persist();
+  },
+
+  advanceCareer: () => {
+    const { player, lifeExtras, notifications, crime } = get();
+    if (!player) return;
+    if (crime.tutuklu || lifeExtras.askerlik?.durum === "aktif") {
+      set({ notifications: addNotification(notifications, "Şu an kariyer ilerletilemez.", "uyari") });
+      return;
+    }
+    const adv = advanceCareerTrack(lifeExtras);
+    if (!adv.yeniMeslek) {
+      set({ notifications: addNotification(notifications, "Daha fazla ilerleme yok veya yol seçilmedi.", "uyari") });
+      return;
+    }
+    let extras = adv.extras;
+    if (["Ünlü Oyuncu", "Süperstar", "Milli Sporcu", "Efsane Sporcu"].includes(adv.yeniMeslek)) {
+      extras = { ...extras, un: Math.min(100, extras.un + 10) };
+    }
+    set({
+      lifeExtras: extras,
+      player: {
+        ...player,
+        meslek: adv.yeniMeslek,
+        gelir: calculateSalary(adv.yeniMeslek, player.ozellikler.zeka, Math.max(0, player.yas - 18), extras.un),
+        un: extras.un,
+      },
+      notifications: addNotification(notifications, adv.mesaj ?? "Kariyer ilerledi.", "yasam"),
+    });
+    get().persist();
+  },
+
+  adoptPetAction: (tur) => {
+    const { player, life, pets, notifications } = get();
+    if (!player || !life) return;
+    if (player.yas < 8) {
+      set({ notifications: addNotification(notifications, "Evcil hayvan için en az 8 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    if (pets.length >= 3) {
+      set({ notifications: addNotification(notifications, "En fazla 3 evcil hayvan bakabilirsin.", "uyari") });
+      return;
+    }
+    const tip = PET_TYPES.find((t) => t.tur === tur);
+    if (!tip) return;
+    if (life.para < tip.maliyet) {
+      set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
+      return;
+    }
+    const pet = adoptPet(tur, life.mevcutYil);
+    set({
+      pets: [...pets, pet],
+      life: { ...life, para: life.para - tip.maliyet },
+      player: { ...player, mutluluk: clamp(player.mutluluk + 6) },
+      notifications: addNotification(notifications, `${pet.isim} (${tip.ad}) ailenize katıldı!`, "yasam"),
+    });
+    get().persist();
+  },
+
+  carePetAction: (petId) => {
+    const { pets, life, player, notifications } = get();
+    if (!life || !player) return;
+    if (life.para < 300) {
+      set({ notifications: addNotification(notifications, "Bakım maliyeti 300 TL.", "uyari") });
+      return;
+    }
+    set({
+      pets: pets.map((p) => (p.id === petId ? carePet(p, life.mevcutYil) : p)),
+      life: { ...life, para: life.para - 300 },
+      player: { ...player, mutluluk: clamp(player.mutluluk + 3) },
+      notifications: addNotification(notifications, "Evcil hayvanına baktın."),
+    });
+    get().persist();
+  },
+
+  treatDiseaseAction: (diseaseId) => {
+    const { diseases, life, notifications } = get();
+    if (!life) return;
+    const result = treatDisease(diseases, diseaseId);
+    if (life.para < result.maliyet) {
+      set({ notifications: addNotification(notifications, `Tedavi ${result.maliyet.toLocaleString("tr-TR")} TL.`, "uyari") });
+      return;
+    }
+    set({
+      diseases: result.diseases,
+      life: { ...life, para: life.para - result.maliyet },
+      notifications: addNotification(notifications, result.mesaj, "yasam"),
+    });
+    get().persist();
+  },
+
+  therapyAction: () => {
+    const { player, life, lifeExtras, notifications } = get();
+    if (!player || !life) return;
+    if (player.yas < 12) {
+      set({ notifications: addNotification(notifications, "Terapi için en az 12 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    if (lifeExtras.sonTerapiYil === life.mevcutYil) {
+      set({ notifications: addNotification(notifications, "Bu yıl zaten terapiye gittin.", "uyari") });
+      return;
+    }
+    if (life.para < 2000) {
+      set({ notifications: addNotification(notifications, "Terapi seansı 2000 TL.", "uyari") });
+      return;
+    }
+    set({
+      life: { ...life, para: life.para - 2000 },
+      lifeExtras: { ...lifeExtras, sonTerapiYil: life.mevcutYil },
+      player: {
+        ...player,
+        psikoloji: clamp(player.psikoloji + 12),
+        stres: clamp(player.stres - 10),
+        mutluluk: clamp(player.mutluluk + 5),
+      },
+      notifications: addNotification(notifications, "Terapi iyi geldi."),
+    });
+    get().persist();
+  },
+
+  plasticSurgeryAction: () => {
+    const { player, life, lifeExtras, notifications } = get();
+    if (!player || !life) return;
+    if (player.yas < 18) {
+      set({ notifications: addNotification(notifications, "Estetik için 18+ olmalısın.", "uyari") });
+      return;
+    }
+    if (lifeExtras.sonEstetikYil === life.mevcutYil) {
+      set({ notifications: addNotification(notifications, "Bu yıl zaten estetik yaptırdın.", "uyari") });
+      return;
+    }
+    if (life.para < 25000) {
+      set({ notifications: addNotification(notifications, "Estetik operasyon 25.000 TL.", "uyari") });
+      return;
+    }
+    set({
+      life: { ...life, para: life.para - 25000 },
+      lifeExtras: {
+        ...lifeExtras,
+        sonEstetikYil: life.mevcutYil,
+        un: Math.min(100, lifeExtras.un + 3),
+      },
+      player: {
+        ...player,
+        sacRengi: SAC_RENKLERI[Math.floor(Math.random() * SAC_RENKLERI.length)],
+        gozRengi: GOZ_RENKLERI[Math.floor(Math.random() * GOZ_RENKLERI.length)],
+        tenRengi: TEN_RENKLERI[Math.floor(Math.random() * TEN_RENKLERI.length)],
+        mutluluk: clamp(player.mutluluk + 8),
+        saglik: clamp(player.saglik - 4),
+        un: Math.min(100, (player.un ?? 0) + 3),
+      },
+      notifications: addNotification(notifications, "Estetik operasyon tamamlandı. Görünümün değişti.", "yasam"),
+    });
+    get().persist();
+  },
+
+  joinGym: () => {
+    const { player, life, lifeExtras, notifications } = get();
+    if (!player || !life) return;
+    if (player.yas < 14) {
+      set({ notifications: addNotification(notifications, "Spor salonu için en az 14 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    if (lifeExtras.gymUyelik) {
+      set({ notifications: addNotification(notifications, "Zaten üyesin.") });
+      return;
+    }
+    if (life.para < 1500) {
+      set({ notifications: addNotification(notifications, "Üyelik giriş ücreti 1500 TL.", "uyari") });
+      return;
+    }
+    set({
+      life: { ...life, para: life.para - 1500 },
+      lifeExtras: { ...lifeExtras, gymUyelik: true },
+      notifications: addNotification(notifications, "Spor salonuna üye oldun. Yıllık aidat kesilir."),
+    });
+    get().persist();
+  },
+
+  gymWorkout: () => {
+    const { player, lifeExtras, notifications } = get();
+    if (!player) return;
+    if (!lifeExtras.gymUyelik) {
+      set({ notifications: addNotification(notifications, "Önce spor salonuna üye ol.", "uyari") });
+      return;
+    }
+    set({
+      player: {
+        ...player,
+        saglik: clamp(player.saglik + 5),
+        stres: clamp(player.stres - 4),
+        kilo: Math.max(40, player.kilo - 1),
+      },
+      notifications: addNotification(notifications, "Antrenman yaptın."),
+    });
+    get().persist();
+  },
+
+  refreshDatingPool: () => {
+    const { player, notifications } = get();
+    if (!player || player.yas < 16) {
+      set({ notifications: addNotification(notifications, "Flört uygulaması 16+.", "uyari") });
+      return;
+    }
+    set({
+      datingCandidates: generateDatingCandidates(player),
+      notifications: addNotification(notifications, "Yeni eşleşmeler yüklendi."),
+    });
+  },
+
+  dateCandidate: (candidateId) => {
+    const { player, family, relationships, datingCandidates, life, notifications } = get();
+    if (!player || !life) return;
+    const cand = datingCandidates.find((c) => c.id === candidateId);
+    if (!cand) return;
+    const hasPartner = relationships.some((r) => r.tip === "es" || r.tip === "sevgili");
+    if (hasPartner) {
+      set({ notifications: addNotification(notifications, "Zaten bir ilişkin var.", "uyari") });
+      return;
+    }
+    const npc: Character = {
+      id: cand.id,
+      userId: player.userId,
+      lifeId: life.id,
+      isim: cand.isim,
+      soyisim: cand.soyisim,
+      yas: cand.yas,
+      dogumYili: life.mevcutYil - cand.yas,
+      cinsiyet: cand.cinsiyet,
+      meslek: cand.meslek,
+      gelir: 10000,
+      ozellikler: { ...player.ozellikler },
+      saglik: 75,
+      mutluluk: 70,
+      stres: 20,
+      uyku: 70,
+      beslenme: 70,
+      kilo: 65,
+      psikoloji: 70,
+      egitim: "universite",
+      durum: "yasiyor",
+      anneId: null,
+      babaId: null,
+      esId: null,
+      sehir: player.sehir,
+      ulke: player.ulke,
+      isPlayer: false,
+      aileRolu: "diger",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const rel = {
+      id: createId(),
+      lifeId: life.id,
+      characterId: player.id,
+      targetId: npc.id,
+      tip: "sevgili" as const,
+      puan: cand.puan,
+      romantik: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    set({
+      family: [...family, npc],
+      relationships: [...relationships, rel],
+      datingCandidates: datingCandidates.filter((c) => c.id !== candidateId),
+      player: { ...player, mutluluk: clamp(player.mutluluk + 5) },
+      notifications: addNotification(notifications, `${cand.isim} ile çıkmaya başladın!`, "yasam"),
+    });
+    get().persist();
+  },
+
+  cheatOnPartner: () => {
+    const { player, relationships, notifications } = get();
+    if (!player || player.yas < 16) return;
+    const partner = relationships.find((r) => r.tip === "es" || r.tip === "sevgili");
+    if (!partner) {
+      set({ notifications: addNotification(notifications, "Aldatacak bir partnerin yok.", "uyari") });
+      return;
+    }
+    const result = attemptCheat(relationships, partner.targetId);
+    set({
+      relationships: result.relationships,
+      player: {
+        ...player,
+        stres: clamp(player.stres + (result.yakalandi ? 15 : 6)),
+        mutluluk: clamp(player.mutluluk + (result.yakalandi ? -12 : 2)),
+        psikoloji: clamp(player.psikoloji - (result.yakalandi ? 8 : 3)),
+      },
+      notifications: addNotification(notifications, result.mesaj, result.yakalandi ? "uyari" : "bilgi"),
+    });
+    get().persist();
+  },
+
+  tryPregnancy: () => {
+    const { player, family, relationships, pregnancy, notifications } = get();
+    if (!player) return;
+    if (pregnancy) {
+      set({ notifications: addNotification(notifications, "Zaten hamilelik süreci var.", "uyari") });
+      return;
+    }
+    const partnerRel = relationships.find((r) => r.tip === "es" || r.tip === "sevgili");
+    const partner = family.find((f) => f.id === partnerRel?.targetId);
+    if (!partner || !canGetPregnant(player.yas, true, false)) {
+      set({ notifications: addNotification(notifications, "Hamilelik için uygun partner/yaş yok.", "uyari") });
+      return;
+    }
+    // Doğuran taraf: kadın oyuncu veya kadın partner
+    if (player.cinsiyet !== "kadin" && partner.cinsiyet !== "kadin") {
+      set({ notifications: addNotification(notifications, "Bu çift için evlat edinmeyi dene.", "uyari") });
+      return;
+    }
+    set({
+      pregnancy: startPregnancy(partner.id, partner.isim),
+      notifications: addNotification(notifications, "Hamilelik başladı. Doğum gelecek yıl.", "yasam"),
+    });
+    get().persist();
+  },
+
+  adoptChildAction: () => {
+    const { player, family, relationships, life, notifications } = get();
+    if (!player || !life) return;
+    if (player.yas < 21) {
+      set({ notifications: addNotification(notifications, "Evlat edinmek için en az 21 yaşında olmalısın.", "uyari") });
+      return;
+    }
+    if (life.para < 20000) {
+      set({ notifications: addNotification(notifications, "Evlat edinme süreci ~20.000 TL.", "uyari") });
+      return;
+    }
+    const spouse = family.find((f) => f.id === player.esId) ?? null;
+    const child = createChild(player, spouse, life);
+    const childRel = createChildRelationship(player, child, life);
+    set({
+      family: [...family, child],
+      relationships: [...relationships, childRel],
+      life: { ...life, para: life.para - 20000 },
+      player: { ...player, mutluluk: clamp(player.mutluluk + 10) },
+      notifications: addNotification(notifications, `${child.isim} evlat edinildi!`, "yasam"),
+    });
+    get().persist();
+  },
+
+  renamePlayer: (isim, soyisim) => {
+    const { player, life, notifications } = get();
+    if (!player || !life) return;
+    if (player.yas < 18) {
+      set({ notifications: addNotification(notifications, "İsim değişikliği 18+.", "uyari") });
+      return;
+    }
+    if (life.para < 5000) {
+      set({ notifications: addNotification(notifications, "Resmi işlem 5000 TL.", "uyari") });
+      return;
+    }
+    const cleanIsim = isim.trim().slice(0, 24);
+    const cleanSoy = soyisim.trim().slice(0, 24);
+    if (!cleanIsim || !cleanSoy) return;
+    set({
+      player: { ...player, isim: cleanIsim, soyisim: cleanSoy },
+      life: { ...life, para: life.para - 5000 },
+      notifications: addNotification(notifications, `Yeni adın: ${cleanIsim} ${cleanSoy}`, "yasam"),
+    });
+    get().persist();
+  },
+
   loadLocalGame: (slot) => {
     const saved = loadFromLocal(slot);
     if (!saved) return false;
@@ -1768,7 +2573,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       journal: saved.journal ?? [],
       neighborhood: saved.neighborhood ?? createNeighborhood(saved.player.sehir),
       school: saved.school ?? createSchoolState(saved.player.yas),
-      crime: saved.crime ?? createCrimeState(),
+      crime: {
+        ...(saved.crime ?? createCrimeState()),
+        kalanCezaYil: saved.crime?.kalanCezaYil ?? 0,
+      },
       politics: saved.politics ?? createPoliticsState(),
       religion: saved.religion ?? createReligionState(),
       hobbies: saved.hobbies ?? [],
@@ -1777,12 +2585,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       aileDurumu: saved.aileDurumu ?? "orta",
       lifetimeScore: saved.lifetimeScore ?? 0,
       lifePromptHistory: saved.lifePromptHistory ?? [],
+      storyState: saved.storyState ?? createEmptyStoryState(),
+      lifeExtras: saved.lifeExtras ?? createEmptyLifeExtras(),
+      pets: saved.pets ?? [],
+      diseases: saved.diseases ?? [],
+      pregnancy: saved.pregnancy ?? null,
+      datingCandidates: saved.datingCandidates ?? [],
       decorations: saved.decorations ?? [],
       npcMemories: [],
       currentEvent: getRandomEvent(
         ageGroup,
         saved.player.yas,
-        (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik)
+        (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik),
+        (saved.storyState ?? createEmptyStoryState()).flags
       ),
       currentPrompt: null,
       notifications: [],
@@ -1845,6 +2660,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       lifetimeScore: state.lifetimeScore,
       aileDurumu: state.aileDurumu,
       lifePromptHistory: state.lifePromptHistory,
+      storyState: state.storyState,
+      lifeExtras: state.lifeExtras,
+      pets: state.pets,
+      diseases: state.diseases,
+      pregnancy: state.pregnancy,
+      datingCandidates: state.datingCandidates,
     };
 
     saveToLocal(saveData);

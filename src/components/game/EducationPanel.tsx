@@ -5,19 +5,34 @@ import { Button } from "@/components/ui/Button";
 import { useGameStore } from "@/store/game-store";
 import { EDUCATION_LABELS } from "@/lib/constants";
 import { getAvailableProfessions } from "@/lib/systems/career";
+import { UNIVERSITE_BOLUMLERI } from "@/lib/systems/life-extras";
 import { GraduationCap, Briefcase } from "lucide-react";
 import type { EducationLevel } from "@/types/game";
 
 const EDUCATION_ORDER: EducationLevel[] = [
-  "anaokulu", "ilkokul", "ortaokul", "lise", "universite", "yuksek_lisans", "doktora",
+  "anaokulu",
+  "ilkokul",
+  "ortaokul",
+  "lise",
+  "universite",
+  "yuksek_lisans",
+  "doktora",
 ];
 
 export function EducationPanel() {
-  const { player, study, findJob } = useGameStore();
+  const { player, lifeExtras, study, findJob, chooseUniversityMajor, advanceCareer } = useGameStore();
 
   if (!player) return null;
 
-  const availableJobs = getAvailableProfessions(player.egitim, player.yas);
+  const trackJobs = lifeExtras.kariyerYolu
+    ? [...(UNIVERSITE_BOLUMLERI.find((b) => b.id === lifeExtras.kariyerYolu)?.kariyer ?? [])]
+    : [];
+  const availableJobs = getAvailableProfessions(
+    player.egitim,
+    player.yas,
+    lifeExtras.universiteBolumu,
+    trackJobs
+  );
   const currentEduIndex = EDUCATION_ORDER.indexOf(player.egitim);
 
   return (
@@ -29,6 +44,9 @@ export function EducationPanel() {
         </div>
         <p className="text-sm text-content-secondary mb-3">
           Mevcut: <span className="font-medium text-content">{EDUCATION_LABELS[player.egitim]}</span>
+          {lifeExtras.universiteBolumu && (
+            <span className="text-accent"> · {lifeExtras.universiteBolumu}</span>
+          )}
         </p>
         {player.yas >= 3 && player.yas <= 30 && (
           <div className="flex flex-wrap gap-2">
@@ -40,6 +58,32 @@ export function EducationPanel() {
           </div>
         )}
       </Card>
+
+      {player.yas >= 17 && (
+        <Card variant="glass" padding="md">
+          <h3 className="font-display text-base font-semibold text-content mb-2">Üniversite Bölümü</h3>
+          <p className="text-xs text-content-muted mb-3">
+            Bölüm seçimi kariyer yolunu açar (tıp, hukuk, sanat…).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {UNIVERSITE_BOLUMLERI.map((b) => (
+              <Button
+                key={b.id}
+                variant={lifeExtras.kariyerYolu === b.id ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => chooseUniversityMajor(b.id)}
+              >
+                {b.ad}
+              </Button>
+            ))}
+          </div>
+          {lifeExtras.kariyerYolu && (
+            <Button variant="secondary" size="sm" className="mt-3" onClick={advanceCareer}>
+              Kariyerde ilerle
+            </Button>
+          )}
+        </Card>
+      )}
 
       {player.yas >= 15 && (
         <Card variant="glass" padding="md">
@@ -54,7 +98,7 @@ export function EducationPanel() {
             </p>
           )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {availableJobs.slice(0, 12).map((meslek) => (
+            {availableJobs.slice(0, 15).map((meslek) => (
               <Button
                 key={meslek}
                 variant="secondary"

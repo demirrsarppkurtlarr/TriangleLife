@@ -13,7 +13,21 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 export function RelationshipPanel() {
-  const { family, relationships, player, life, relationshipAction, actionCooldowns } = useGameStore();
+  const {
+    family,
+    relationships,
+    player,
+    life,
+    relationshipAction,
+    actionCooldowns,
+    pregnancy,
+    datingCandidates,
+    tryPregnancy,
+    cheatOnPartner,
+    adoptChildAction,
+    refreshDatingPool,
+    dateCandidate,
+  } = useGameStore();
 
   if (!player || !life) return null;
 
@@ -88,7 +102,7 @@ export function RelationshipPanel() {
             <Heart size={20} className="text-accent" />
             <h3 className="font-display text-lg font-semibold text-content">Romantik</h3>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mb-4">
             {ROMANTIC_ACTIONS.filter((a) => player.yas >= a.minYas).map((action) => (
               <Button
                 key={action.id}
@@ -108,6 +122,46 @@ export function RelationshipPanel() {
                 {action.label}
               </Button>
             ))}
+            <Button variant="secondary" size="sm" onClick={tryPregnancy}>
+              Hamilelik dene
+            </Button>
+            <Button variant="secondary" size="sm" onClick={cheatOnPartner}>
+              Aldat
+            </Button>
+            <Button variant="secondary" size="sm" onClick={adoptChildAction}>
+              Evlat edin
+            </Button>
+          </div>
+          {pregnancy && (
+            <p className="text-xs text-accent mb-3">
+              Hamilelik sürüyor · partner: {pregnancy.partnerIsim}
+            </p>
+          )}
+          <div className="border-t border-border-subtle/50 pt-3">
+            <p className="text-sm font-medium text-content mb-2">Flört uygulaması</p>
+            <Button variant="secondary" size="sm" className="mb-2" onClick={refreshDatingPool}>
+              Eşleşme yenile
+            </Button>
+            <div className="space-y-2">
+              {datingCandidates.map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm text-content">
+                      {c.isim} {c.soyisim}
+                    </p>
+                    <p className="text-xs text-content-muted">
+                      {c.yas} · {c.meslek} · uyum {c.puan}
+                    </p>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={() => dateCandidate(c.id)}>
+                    Çık
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         </Card>
       )}

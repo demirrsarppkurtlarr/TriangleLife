@@ -38,6 +38,11 @@ export function CharacterPanel({ character, money, score }: CharacterPanelProps)
             <p className="text-sm text-content-secondary">
               {character.yas} yaş · {AGE_GROUP_LABELS[ageGroup]} · {character.sehir}
             </p>
+            <p className="text-xs text-content-muted mt-0.5">
+              {character.ehliyet ? "Ehliyet var" : "Ehliyetsiz"}
+              {character.universiteBolumu ? ` · ${character.universiteBolumu}` : ""}
+              {typeof character.un === "number" ? ` · Ün ${character.un}` : ""}
+            </p>
             <p className="text-xs text-content-muted mt-0.5">{city.bolge} · {city.aciklama.slice(0, 60)}…</p>
             {(character.sacRengi || character.gozRengi || character.tenRengi) && (
               <p className="text-xs text-content-muted mt-0.5">

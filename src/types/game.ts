@@ -93,6 +93,10 @@ export interface Character {
   zorluk?: string;
   boyPotansiyeli?: number;
   genetikOzet?: string;
+  ehliyet?: boolean;
+  un?: number;
+  universiteBolumu?: string;
+  olumNedeni?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -266,4 +270,10 @@ export interface SavedGameState {
   lifetimeScore?: number;
   aileDurumu?: string;
   lifePromptHistory?: string[];
+  storyState?: import("@/lib/systems/story-continuity").StoryState;
+  lifeExtras?: import("@/lib/systems/life-extras").LifeExtras;
+  pets?: import("@/lib/systems/pets").Pet[];
+  diseases?: import("@/lib/systems/diseases").Disease[];
+  pregnancy?: import("@/lib/systems/romance-depth").PregnancyState | null;
+  datingCandidates?: import("@/lib/systems/romance-depth").DatingCandidate[];
 }

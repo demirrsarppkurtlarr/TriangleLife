@@ -10,7 +10,11 @@ import { INANC_OPTIONS, PRACTICE_LABELS, type ReligionPractice } from "@/lib/sys
 import { getAvailableHobbies, hobbyTier } from "@/lib/systems/hobbies";
 import { schoolRankLabel } from "@/lib/systems/school";
 import { geneticsSummary } from "@/lib/systems/genetics";
-import { MapPin, BookOpen, Scale, Landmark, BookMarked, Puzzle, Dna, Building2 } from "lucide-react";
+import { MapPin, BookOpen, Scale, Landmark, BookMarked, Puzzle, Dna, Building2, PawPrint, IdCard } from "lucide-react";
+import { CITIES } from "@/lib/constants";
+import { PET_TYPES } from "@/lib/systems/pets";
+import { fameLabel } from "@/lib/systems/life-extras";
+import { useState } from "react";
 
 export function LifestylePanel() {
   const {
@@ -22,6 +26,8 @@ export function LifestylePanel() {
     religion,
     hobbies,
     genetics,
+    lifeExtras,
+    pets,
     helpNeighbor,
     schoolStudy,
     attemptCrimeAction,
@@ -33,6 +39,12 @@ export function LifestylePanel() {
     worshipAction,
     startHobbyAction,
     practiceHobbyAction,
+    getDriversLicense,
+    moveCity,
+    startMilitaryService,
+    adoptPetAction,
+    carePetAction,
+    renamePlayer,
   } = useGameStore();
 
   if (!player) return null;
@@ -48,13 +60,66 @@ export function LifestylePanel() {
           <h3 className="font-display text-lg font-semibold text-content">Şehir: {city.ad}</h3>
         </div>
         <p className="text-sm text-content-secondary mb-3">{city.aciklama}</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs mb-3">
           <div className="rounded-button bg-surface-overlay/40 p-2">Yaşam maliyeti · {city.yasamMaliyeti}</div>
           <div className="rounded-button bg-surface-overlay/40 p-2">İş fırsatı · {city.isFirsatı}</div>
           <div className="rounded-button bg-surface-overlay/40 p-2">Eğitim · {city.egitim}</div>
           <div className="rounded-button bg-surface-overlay/40 p-2">Güvenlik · {city.guvenlik}</div>
           <div className="rounded-button bg-surface-overlay/40 p-2">Kültür · {city.kultur}</div>
           <div className="rounded-button bg-surface-overlay/40 p-2">Bölge · {city.bolge}</div>
+        </div>
+        <p className="text-xs text-content-muted mb-2">
+          Ün: {fameLabel(lifeExtras.un)} ({lifeExtras.un}) · Ehliyet: {lifeExtras.ehliyet ? "Var" : "Yok"}
+          {lifeExtras.askerlik ? ` · Askerlik: ${lifeExtras.askerlik.durum}` : ""}
+          {crime.tutuklu ? ` · Hapiste (${crime.kalanCezaYil}y)` : ""}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {!lifeExtras.ehliyet && player.yas >= 18 && (
+            <Button variant="secondary" size="sm" onClick={getDriversLicense}>
+              Ehliyet al (3500₺)
+            </Button>
+          )}
+          {player.cinsiyet === "erkek" && player.yas >= 20 && (
+            <Button variant="secondary" size="sm" onClick={startMilitaryService}>
+              Askere git
+            </Button>
+          )}
+          {CITIES.filter((c) => c !== player.sehir).slice(0, 6).map((c) => (
+            <Button key={c} variant="ghost" size="sm" onClick={() => moveCity(c)}>
+              {c}&apos;e taşın
+            </Button>
+          ))}
+        </div>
+      </Card>
+
+      <RenameCard onRename={renamePlayer} yas={player.yas} />
+
+      <Card variant="glass" padding="md">
+        <div className="flex items-center gap-2 mb-3">
+          <PawPrint size={20} className="text-accent" />
+          <h3 className="font-display text-lg font-semibold text-content">Evcil Hayvanlar</h3>
+        </div>
+        <div className="space-y-2 mb-3">
+          {pets.map((p) => (
+            <div key={p.id} className="flex items-center justify-between rounded-button bg-surface-overlay/40 px-3 py-2">
+              <div>
+                <p className="text-sm font-medium text-content">{p.isim}</p>
+                <p className="text-xs text-content-muted">
+                  {p.tur} · {p.yas}y · sağlık {p.saglik}
+                </p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => carePetAction(p.id)}>
+                Bakım (300₺)
+              </Button>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {PET_TYPES.map((t) => (
+            <Button key={t.tur} variant="ghost" size="sm" onClick={() => adoptPetAction(t.tur)}>
+              + {t.ad} ({t.maliyet}₺)
+            </Button>
+          ))}
         </div>
       </Card>
 
@@ -203,7 +268,7 @@ export function LifestylePanel() {
           </div>
           <p className="text-xs text-content-muted mb-3">
             Sabıka {crime.sabika}
-            {crime.tutuklu ? " · Tutuklu" : ""}
+            {crime.tutuklu ? ` · Hapiste (${crime.kalanCezaYil || 1} yıl kaldı)` : ""}
           </p>
           <p className="text-xs text-danger mb-2">Suç gerçekçi sonuçlar doğurur; puan kasma aracı değildir.</p>
           <div className="space-y-2">
@@ -231,5 +296,42 @@ export function LifestylePanel() {
         </Card>
       )}
     </div>
+  );
+}
+
+function RenameCard({
+  onRename,
+  yas,
+}: {
+  onRename: (isim: string, soyisim: string) => void;
+  yas: number;
+}) {
+  const [isim, setIsim] = useState("");
+  const [soyisim, setSoyisim] = useState("");
+  if (yas < 18) return null;
+  return (
+    <Card variant="glass" padding="md">
+      <div className="flex items-center gap-2 mb-3">
+        <IdCard size={20} className="text-accent" />
+        <h3 className="font-display text-lg font-semibold text-content">İsim Değiştir</h3>
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          className="rounded-button bg-surface-overlay/50 border border-border-subtle px-3 py-2 text-sm text-content"
+          placeholder="Ad"
+          value={isim}
+          onChange={(e) => setIsim(e.target.value)}
+        />
+        <input
+          className="rounded-button bg-surface-overlay/50 border border-border-subtle px-3 py-2 text-sm text-content"
+          placeholder="Soyad"
+          value={soyisim}
+          onChange={(e) => setSoyisim(e.target.value)}
+        />
+        <Button variant="secondary" size="sm" onClick={() => onRename(isim, soyisim)}>
+          Değiştir (5k₺)
+        </Button>
+      </div>
+    </Card>
   );
 }

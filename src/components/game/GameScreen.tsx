@@ -15,6 +15,7 @@ import { SocialPanel } from "@/components/game/SocialPanel";
 import { LifestylePanel } from "@/components/game/LifestylePanel";
 import { LifeJournal } from "@/components/game/LifeJournal";
 import { LifePromptModal } from "@/components/game/LifePromptModal";
+import { StoryThreadsPanel } from "@/components/game/StoryThreadsPanel";
 import { DeathScreen } from "@/components/game/DeathScreen";
 import { Notifications } from "@/components/game/Notifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -31,6 +32,7 @@ export function GameScreen() {
     currentPrompt,
     eventHistory,
     journal,
+    storyState,
     lifetimeScore,
     activeTab,
     isDead,
@@ -94,6 +96,7 @@ export function GameScreen() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">
             <CharacterPanel character={player} money={life.para} score={lifetimeScore} />
+            <StoryThreadsPanel storyState={storyState} />
           </div>
           <div className="lg:col-span-2 space-y-6">
             {currentPrompt ? (

@@ -28,6 +28,9 @@ export function DeathScreen() {
           <p className="text-content-secondary mt-2">
             {player.isim} {player.soyisim}, {player.yas} yaşında hayata veda etti.
           </p>
+          {player.olumNedeni && (
+            <p className="text-sm text-warning mt-2">Ölüm nedeni: {player.olumNedeni}</p>
+          )}
           <p className="text-sm text-accent mt-2">Yaşam skoru: {lifetimeScore}</p>
           {life && (
             <p className="text-xs text-content-muted mt-1">
