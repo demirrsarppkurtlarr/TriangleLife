@@ -11,27 +11,27 @@ const config: Config = {
     extend: {
       colors: {
         surface: {
-          DEFAULT: "var(--color-surface)",
-          elevated: "var(--color-surface-elevated)",
-          overlay: "var(--color-surface-overlay)",
+          DEFAULT: "rgb(var(--color-surface) / <alpha-value>)",
+          elevated: "rgb(var(--color-surface-elevated) / <alpha-value>)",
+          overlay: "rgb(var(--color-surface-overlay) / var(--overlay-alpha))",
         },
         content: {
-          DEFAULT: "var(--color-content)",
-          secondary: "var(--color-content-secondary)",
-          muted: "var(--color-content-muted)",
+          DEFAULT: "rgb(var(--color-content) / <alpha-value>)",
+          secondary: "rgb(var(--color-content-secondary) / <alpha-value>)",
+          muted: "rgb(var(--color-content-muted) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "var(--color-accent)",
-          hover: "var(--color-accent-hover)",
-          muted: "var(--color-accent-muted)",
+          DEFAULT: "rgb(var(--color-accent) / <alpha-value>)",
+          hover: "rgb(var(--color-accent-hover) / <alpha-value>)",
+          muted: "rgb(var(--color-accent) / var(--accent-muted-alpha))",
         },
         border: {
-          DEFAULT: "var(--color-border)",
-          subtle: "var(--color-border-subtle)",
+          DEFAULT: "rgb(var(--color-border) / var(--border-alpha))",
+          subtle: "rgb(var(--color-border-subtle) / var(--border-subtle-alpha))",
         },
-        success: "var(--color-success)",
-        warning: "var(--color-warning)",
-        danger: "var(--color-danger)",
+        success: "rgb(var(--color-success) / <alpha-value>)",
+        warning: "rgb(var(--color-warning) / <alpha-value>)",
+        danger: "rgb(var(--color-danger) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],

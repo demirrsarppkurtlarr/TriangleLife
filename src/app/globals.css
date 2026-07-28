@@ -8,45 +8,53 @@
   --font-sans: "Inter", system-ui, sans-serif;
   --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
 
-  --color-surface: #f5f5f7;
-  --color-surface-elevated: #ffffff;
-  --color-surface-overlay: rgba(255, 255, 255, 0.72);
+  --color-surface: 245 245 247;
+  --color-surface-elevated: 255 255 255;
+  --color-surface-overlay: 255 255 255;
 
-  --color-content: #1d1d1f;
-  --color-content-secondary: #6e6e73;
-  --color-content-muted: #86868b;
+  --color-content: 29 29 31;
+  --color-content-secondary: 110 110 115;
+  --color-content-muted: 134 134 139;
 
-  --color-accent: #0071e3;
-  --color-accent-hover: #0077ed;
-  --color-accent-muted: rgba(0, 113, 227, 0.1);
+  --color-accent: 0 113 227;
+  --color-accent-hover: 0 119 237;
 
-  --color-border: rgba(0, 0, 0, 0.08);
-  --color-border-subtle: rgba(0, 0, 0, 0.04);
+  --color-border: 0 0 0;
+  --color-border-subtle: 0 0 0;
 
-  --color-success: #34c759;
-  --color-warning: #ff9500;
-  --color-danger: #ff3b30;
+  --color-success: 52 199 89;
+  --color-warning: 255 149 0;
+  --color-danger: 255 59 48;
+
+  --overlay-alpha: 0.72;
+  --border-alpha: 0.08;
+  --border-subtle-alpha: 0.04;
+  --accent-muted-alpha: 0.1;
 }
 
 .dark {
-  --color-surface: #000000;
-  --color-surface-elevated: #1c1c1e;
-  --color-surface-overlay: rgba(28, 28, 30, 0.72);
+  --color-surface: 0 0 0;
+  --color-surface-elevated: 28 28 30;
+  --color-surface-overlay: 28 28 30;
 
-  --color-content: #f5f5f7;
-  --color-content-secondary: #a1a1a6;
-  --color-content-muted: #6e6e73;
+  --color-content: 245 245 247;
+  --color-content-secondary: 161 161 166;
+  --color-content-muted: 110 110 115;
 
-  --color-accent: #0a84ff;
-  --color-accent-hover: #409cff;
-  --color-accent-muted: rgba(10, 132, 255, 0.15);
+  --color-accent: 10 132 255;
+  --color-accent-hover: 64 156 255;
 
-  --color-border: rgba(255, 255, 255, 0.1);
-  --color-border-subtle: rgba(255, 255, 255, 0.05);
+  --color-border: 255 255 255;
+  --color-border-subtle: 255 255 255;
 
-  --color-success: #30d158;
-  --color-warning: #ff9f0a;
-  --color-danger: #ff453a;
+  --color-success: 48 209 88;
+  --color-warning: 255 159 10;
+  --color-danger: 255 69 58;
+
+  --overlay-alpha: 0.72;
+  --border-alpha: 0.1;
+  --border-subtle-alpha: 0.05;
+  --accent-muted-alpha: 0.15;
 }
 
 @layer base {
@@ -71,6 +79,6 @@
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-border) transparent;
+    scrollbar-color: rgb(var(--color-border) / var(--border-alpha)) transparent;
   }
 }
