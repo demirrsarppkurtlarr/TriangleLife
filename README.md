@@ -89,13 +89,42 @@ Supabase Dashboard → Authentication → Providers:
 
 ## Render Deploy
 
-1. Render Dashboard'da yeni Web Service oluşturun
-2. GitHub deposunu bağlayın
-3. `render.yaml` dosyası otomatik yapılandırmayı sağlar
-4. Ortam değişkenlerini ekleyin:
+`render.yaml` Blueprint dosyası hazırdır. İki yöntem:
+
+### Yöntem A — Blueprint (önerilen)
+
+1. [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint**
+2. GitHub deposunu bağlayın (`demirrsarppkurtlarr/TriangleLife`)
+3. Blueprint `render.yaml` dosyasını okuyup servisi oluşturur
+4. Şu secret değişkenleri manuel doldurun:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 5. Deploy edin
+
+### Yöntem B — Manuel Web Service
+
+| Ayar | Değer |
+|------|-------|
+| Runtime | Node |
+| Region | Frankfurt |
+| Branch | `main` |
+| Build Command | `npm ci && npm run build` |
+| Start Command | `npm start` |
+| Health Check Path | `/api/health` |
+| Node Version | 20.18.0 (`NODE_VERSION`) |
+
+### Ortam Değişkenleri
+
+| Değişken | Açıklama | Kaynak |
+|----------|----------|--------|
+| `NODE_ENV` | `production` | Otomatik |
+| `NODE_VERSION` | Node.js sürümü | Otomatik |
+| `PORT` | Dinleme portu | Otomatik |
+| `NEXT_TELEMETRY_DISABLED` | Telemetri kapalı | Otomatik |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase proje URL | Manuel |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key | Manuel |
+
+Deploy sonrası Supabase Auth → Site URL ve Redirect URLs'e Render domain'inizi ekleyin.
 
 ## Proje Yapısı
 

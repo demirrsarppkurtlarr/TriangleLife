@@ -1,3 +1,20 @@
+# ============================================================
+# TriangleLife — Render Blueprint
+# https://render.com/docs/blueprint-spec
+# ============================================================
+# Deploy: Render Dashboard → New → Blueprint → bu repo'yu seç
+#
+# Ortam Değişkenleri (Deploy sonrası Dashboard'dan doldurun):
+#   NEXT_PUBLIC_SUPABASE_URL      — Supabase proje URL'i
+#                                   Örn: https://xxxx.supabase.co
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon/public API anahtarı
+#                                   Settings → API → anon public
+#
+# Build:  npm ci && npm run build
+# Start:  npm start  (PORT Render tarafından otomatik atanır)
+# Health: GET /api/health
+# ============================================================
+
 services:
   - type: web
     name: triangle-life
@@ -5,14 +22,28 @@ services:
     region: frankfurt
     plan: free
     branch: main
-    buildCommand: npm install && npm run build
+    rootDir: .
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    autoDeploy: true
+    numInstances: 1
+    # Free plan disk desteklemez; starter+ için disk eklenebilir
+    # disk:
+    #   name: triangle-life-data
+    #   mountPath: /opt/render/project/src/.data
+    #   sizeGB: 1
     envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "10000"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Supabase — Dashboard'dan manuel doldurun (sync: false = secret)
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
         sync: false
-    autoDeploy: true
