@@ -85,6 +85,10 @@ export interface Character {
   sehir: string;
   ulke: string;
   isPlayer?: boolean;
+  sacRengi?: string;
+  gozRengi?: string;
+  tenRengi?: string;
+  zorluk?: string;
   createdAt: string;
   updatedAt: string;
 }

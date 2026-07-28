@@ -51,39 +51,38 @@ export function GameScreen() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 md:space-y-6">
       <Notifications />
+
+      <GameTabs active={activeTab} onChange={setActiveTab} />
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="font-display text-2xl font-bold text-content">
+          <h2 className="font-display text-2xl font-bold text-content tracking-tight">
             {life.mevcutYil}
           </h2>
-          <p className="text-content-secondary">
-            {player.yas} yaşında · {player.sehir}
+          <p className="text-content-secondary text-sm">
+            {player.isim} {player.soyisim} · {player.yas} yaş · {player.sehir}
             {player.meslek && ` · ${player.meslek}`}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {!currentEvent && activeTab === "hayat" && (
-            <Button onClick={advanceYear} className="gap-2">
+            <Button onClick={advanceYear} className="gap-2 rounded-full">
               <Calendar size={18} />
               Yılı İlerlet
             </Button>
           )}
-          <Button variant="secondary" onClick={persist} disabled={isSaving} className="gap-2">
+          <Button variant="secondary" onClick={persist} disabled={isSaving} className="gap-2 rounded-full">
             <Save size={18} />
             {isSaving ? "Kaydediliyor..." : "Kaydet"}
           </Button>
-          <Button variant="ghost" onClick={resetGame} className="gap-2">
+          <Button variant="ghost" onClick={resetGame} className="gap-2 rounded-full">
             <LogOut size={18} />
             Çıkış
           </Button>
         </div>
       </div>
-
-      <GameTabs active={activeTab} onChange={setActiveTab} />
-
       {activeTab === "hayat" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 space-y-6">

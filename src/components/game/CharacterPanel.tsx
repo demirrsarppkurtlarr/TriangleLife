@@ -5,6 +5,7 @@ import { StatBar } from "@/components/ui/StatBar";
 import type { Character } from "@/types/game";
 import { AGE_GROUP_LABELS, getAgeGroup } from "@/lib/constants";
 import { formatMoney } from "@/lib/generators";
+import { HAIR_LABELS, EYE_LABELS, SKIN_LABELS } from "@/types/creation";
 import { User } from "lucide-react";
 
 interface CharacterPanelProps {
@@ -29,6 +30,13 @@ export function CharacterPanel({ character, money }: CharacterPanelProps) {
             <p className="text-sm text-content-secondary">
               {character.yas} yaş · {AGE_GROUP_LABELS[ageGroup]} · {character.sehir}
             </p>
+            {(character.sacRengi || character.gozRengi || character.tenRengi) && (
+              <p className="text-xs text-content-muted mt-0.5">
+                {character.sacRengi && HAIR_LABELS[character.sacRengi as keyof typeof HAIR_LABELS]}
+                {character.gozRengi && ` · ${EYE_LABELS[character.gozRengi as keyof typeof EYE_LABELS]} göz`}
+                {character.tenRengi && ` · ${SKIN_LABELS[character.tenRengi as keyof typeof SKIN_LABELS]}`}
+              </p>
+            )}
           </div>
         </div>
 

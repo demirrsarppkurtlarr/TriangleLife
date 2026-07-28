@@ -5,7 +5,6 @@ import type {
   Relationship,
   GameEvent,
   EventLog,
-  Gender,
   GameTab,
   Property,
   Investment,
@@ -16,9 +15,10 @@ import type {
   EducationLevel,
 } from "@/types/game";
 import { getAgeGroup, VEHICLE_TYPES } from "@/lib/constants";
-import { generateFamily, generatePlayer } from "@/lib/generators";
+import { generateFamily, buildPersonalityFromFocus } from "@/lib/generators";
 import { getRandomEvent } from "@/lib/events/event-pool";
-import { CITIES } from "@/lib/constants";
+import type { CharacterCreationOptions } from "@/types/creation";
+import { WEALTH_STARTING_MONEY } from "@/types/creation";
 import { applyHealthDecay, applyHealing } from "@/lib/systems/health";
 import { calculateLoanPayment, simulateMarketPrice, INVESTMENT_SYMBOLS } from "@/lib/systems/finance";
 import { applyRelationshipAction } from "@/lib/systems/relationships";
@@ -65,7 +65,7 @@ interface GameState {
 
   setUserId: (id: string | null) => void;
   loadGame: (userId: string) => Promise<boolean>;
-  startNewLife: (cinsiyet: Gender, userId?: string) => void;
+  startNewLife: (options: CharacterCreationOptions, userId?: string) => void;
   advanceYear: () => void;
   selectChoice: (choiceId: string) => void;
   setActiveTab: (tab: GameTab) => void;
@@ -216,16 +216,21 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  startNewLife: (cinsiyet, userId) => {
-    const baslangicYili = 2026;
+  startNewLife: (options, userId) => {
+    const baslangicYili = options.dogumYili;
     const uid = userId ?? get().userId ?? "local-user";
     const life = createLife(uid, baslangicYili);
-    const familyMembers = generateFamily();
-    const playerData = generatePlayer(cinsiyet, baslangicYili);
+    life.para = WEALTH_STARTING_MONEY[options.aileDurumu];
 
-    const familyChars = familyMembers.map((m) =>
-      createCharacterFromFamily(m, life.id, uid, baslangicYili)
-    );
+    const familyMembers = generateFamily({
+      soyisim: options.soyisim.trim(),
+      kardesSayisi: options.kardesSayisi,
+    });
+
+    const familyChars = familyMembers.map((m) => {
+      const char = createCharacterFromFamily(m, life.id, uid, baslangicYili);
+      return { ...char, sehir: options.sehir };
+    });
 
     const anne = familyChars.find((c) =>
       familyMembers.find((m) => m.rol === "anne" && m.isim === c.isim)
@@ -234,21 +239,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       familyMembers.find((m) => m.rol === "baba" && m.isim === c.isim)
     );
 
+    const ozellikler = buildPersonalityFromFocus(options.kisilikOdagi);
+    const difficultyHealth =
+      options.zorluk === "kolay" ? 15 : options.zorluk === "zor" ? -10 : 0;
+
     const player: Character = {
       id: createId(),
       userId: uid,
       lifeId: life.id,
-      isim: playerData.isim,
-      soyisim: playerData.soyisim,
+      isim: options.isim.trim(),
+      soyisim: options.soyisim.trim(),
       yas: 0,
       dogumYili: baslangicYili,
-      cinsiyet,
+      cinsiyet: options.cinsiyet,
       meslek: null,
       gelir: 0,
-      ozellikler: playerData.ozellikler,
-      saglik: playerData.ozellikler.saglik,
-      mutluluk: playerData.ozellikler.mutluluk,
-      stres: 10,
+      ozellikler,
+      saglik: Math.max(20, Math.min(100, ozellikler.saglik + difficultyHealth)),
+      mutluluk: ozellikler.mutluluk,
+      stres: options.zorluk === "zor" ? 25 : 10,
       uyku: 80,
       beslenme: 80,
       kilo: 3 + Math.floor(Math.random() * 2),
@@ -258,9 +267,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       anneId: anne?.id ?? null,
       babaId: baba?.id ?? null,
       esId: null,
-      sehir: familyChars[0]?.sehir ?? "İstanbul",
+      sehir: options.sehir,
       ulke: "Türkiye",
       isPlayer: true,
+      sacRengi: options.sacRengi,
+      gozRengi: options.gozRengi,
+      tenRengi: options.tenRengi,
+      zorluk: options.zorluk,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -294,7 +307,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       companies: [],
       loans: [],
       achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
-      notifications: addNotification([], "Hayatına hoş geldin!"),
+      notifications: addNotification(
+        [],
+        `Hoş geldin ${player.isim} ${player.soyisim}! ${options.sehir}'de yeni bir hayat başlıyor.`
+      ),
       npcMemories: [],
       decorations: [],
       activeTab: "hayat",

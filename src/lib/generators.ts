@@ -2,7 +2,6 @@ import type { PersonalityTraits, Gender } from "@/types/game";
 import {
   TURKISH_NAMES,
   TURKISH_SURNAMES,
-  CITIES,
   PROFESSIONS,
 } from "@/lib/constants";
 
@@ -75,11 +74,11 @@ export interface GeneratedFamilyMember {
   rol: "anne" | "baba" | "kardes";
 }
 
-export function generateFamily(): GeneratedFamilyMember[] {
-  const soyisim = randomItem(TURKISH_SURNAMES);
-  const sehir = randomItem(CITIES);
-  void sehir;
-
+export function generateFamily(options?: {
+  soyisim?: string;
+  kardesSayisi?: number;
+}): GeneratedFamilyMember[] {
+  const soyisim = options?.soyisim ?? randomItem(TURKISH_SURNAMES);
   const anneYas = generateAgeForRole("anne");
   const babaYas = generateAgeForRole("baba");
 
@@ -109,7 +108,7 @@ export function generateFamily(): GeneratedFamilyMember[] {
 
   const members: GeneratedFamilyMember[] = [anne, baba];
 
-  const kardesSayisi = randomInt(0, 3);
+  const kardesSayisi = options?.kardesSayisi ?? randomInt(0, 3);
   for (let i = 0; i < kardesSayisi; i++) {
     const cinsiyet: Gender = Math.random() > 0.5 ? "erkek" : "kadin";
     const kardes: GeneratedFamilyMember = {
@@ -126,6 +125,27 @@ export function generateFamily(): GeneratedFamilyMember[] {
   }
 
   return members;
+}
+
+export function buildPersonalityFromFocus(
+  focus: string
+): PersonalityTraits {
+  const base = generatePersonality();
+  if (focus === "dengeli") return base;
+
+  const map: Record<string, keyof PersonalityTraits> = {
+    zeka: "zeka",
+    sosyallik: "sosyallik",
+    guven: "guven",
+    empati: "empati",
+    saglik: "saglik",
+  };
+
+  const key = map[focus];
+  if (key) {
+    return { ...base, [key]: clamp(base[key] + 20) };
+  }
+  return base;
 }
 
 export function generatePlayer(cinsiyet: Gender, baslangicYili: number): {
