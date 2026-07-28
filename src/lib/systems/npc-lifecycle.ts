@@ -1,5 +1,5 @@
 import type { Character, Gender, Relationship, Life } from "@/types/game";
-import { TURKISH_NAMES, TURKISH_SURNAMES, CITIES } from "@/lib/constants";
+import { TURKISH_NAMES } from "@/lib/constants";
 import { generatePersonality } from "@/lib/generators";
 
 function createId(): string {
@@ -84,6 +84,7 @@ export function createChild(
     durum: "yasiyor",
     anneId: player.cinsiyet === "kadin" ? player.id : spouse?.id ?? null,
     babaId: player.cinsiyet === "erkek" ? player.id : spouse?.id ?? null,
+    esId: null,
     sehir: player.sehir,
     ulke: player.ulke,
     isPlayer: false,
