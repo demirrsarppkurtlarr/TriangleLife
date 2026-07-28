@@ -14,6 +14,7 @@ import { AchievementsPanel } from "@/components/game/AchievementsPanel";
 import { SocialPanel } from "@/components/game/SocialPanel";
 import { LifestylePanel } from "@/components/game/LifestylePanel";
 import { LifeJournal } from "@/components/game/LifeJournal";
+import { LifePromptModal } from "@/components/game/LifePromptModal";
 import { DeathScreen } from "@/components/game/DeathScreen";
 import { Notifications } from "@/components/game/Notifications";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -27,6 +28,7 @@ export function GameScreen() {
     family,
     relationships,
     currentEvent,
+    currentPrompt,
     eventHistory,
     journal,
     lifetimeScore,
@@ -56,6 +58,7 @@ export function GameScreen() {
   return (
     <div className="space-y-5 md:space-y-6 pb-24 md:pb-0">
       <Notifications />
+      <LifePromptModal />
 
       <GameTabs active={activeTab} onChange={setActiveTab} />
 
@@ -70,7 +73,7 @@ export function GameScreen() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {!currentEvent && activeTab === "hayat" && (
+          {!currentEvent && !currentPrompt && activeTab === "hayat" && (
             <Button onClick={advanceYear} className="gap-2 rounded-full">
               <Calendar size={18} />
               Yılı İlerlet
@@ -93,7 +96,14 @@ export function GameScreen() {
             <CharacterPanel character={player} money={life.para} score={lifetimeScore} />
           </div>
           <div className="lg:col-span-2 space-y-6">
-            {currentEvent ? (
+            {currentPrompt ? (
+              <div className="rounded-card border border-accent/30 bg-accent/5 p-6 text-center">
+                <p className="text-sm text-accent font-medium mb-2">Yaşam kararı bekleniyor</p>
+                <p className="text-content-secondary text-sm">
+                  Ekranın ortasındaki pencereden seçimini yap. ({currentPrompt.baslik})
+                </p>
+              </div>
+            ) : currentEvent ? (
               <EventCard event={currentEvent} onSelectChoice={selectChoice} />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[300px] rounded-card bg-surface-overlay/30 border border-border-subtle/50">

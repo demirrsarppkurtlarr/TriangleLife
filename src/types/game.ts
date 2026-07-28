@@ -86,6 +86,7 @@ export interface Character {
   sehir: string;
   ulke: string;
   isPlayer?: boolean;
+  aileRolu?: "anne" | "baba" | "kardes" | "es" | "cocuk" | "dede" | "anneanne" | "babaanne" | "diger";
   sacRengi?: string;
   gozRengi?: string;
   tenRengi?: string;
@@ -229,7 +230,7 @@ export interface EventLog {
 export interface GameNotification {
   id: string;
   mesaj: string;
-  tip: "bilgi" | "basarim" | "uyari";
+  tip: "bilgi" | "basarim" | "uyari" | "yasam";
 }
 
 export interface JournalEntry {
@@ -264,4 +265,5 @@ export interface SavedGameState {
   actionCooldowns?: import("@/lib/systems/relationships").ActionCooldown[];
   lifetimeScore?: number;
   aileDurumu?: string;
+  lifePromptHistory?: string[];
 }

@@ -9,7 +9,7 @@ import { Users, Heart } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
   anne: "Anne", baba: "Baba", kardes: "Kardeş", es: "Eş",
-  cocuk: "Çocuk", arkadas: "Arkadaş", sevgili: "Sevgili",
+  cocuk: "Çocuk", arkadas: "Arkadaş", sevgili: "Sevgili", akraba: "Akraba",
 };
 
 export function RelationshipPanel() {

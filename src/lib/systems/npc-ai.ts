@@ -74,14 +74,26 @@ export function simulateNpcYear(
   let message: string | undefined;
 
   // İş değişikliği
-  if (updated.yas >= 18 && updated.yas < 65 && Math.random() < 0.04) {
-    const meslekler = ["Öğretmen", "Mühendis", "Garson", "Satış Temsilcisi", "Yazılımcı", "Şoför"];
+  if (updated.yas >= 18 && updated.yas < 65 && Math.random() < 0.06) {
+    const meslekler = ["Öğretmen", "Mühendis", "Garson", "Satış Temsilcisi", "Yazılımcı", "Şoför", "Hemşire", "Muhasebeci"];
     updated = {
       ...updated,
       meslek: meslekler[Math.floor(Math.random() * meslekler.length)],
       gelir: 8000 + Math.floor(Math.random() * 25000),
     };
     message = `${updated.isim} iş değiştirdi: ${updated.meslek}`;
+  }
+
+  // Sağlık dalgalanması
+  if (Math.random() < 0.15) {
+    const delta = Math.floor((Math.random() - 0.45) * 10);
+    updated = { ...updated, saglik: Math.max(5, Math.min(100, updated.saglik + delta)) };
+  }
+
+  // Mutluluk dalgalanması
+  if (Math.random() < 0.2) {
+    const delta = Math.floor((Math.random() - 0.4) * 8);
+    updated = { ...updated, mutluluk: Math.max(5, Math.min(100, updated.mutluluk + delta)) };
   }
 
   // Emeklilik

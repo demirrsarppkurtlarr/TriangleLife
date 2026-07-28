@@ -71,7 +71,7 @@ export interface GeneratedFamilyMember {
   meslek: string;
   gelir: number;
   ozellikler: PersonalityTraits;
-  rol: "anne" | "baba" | "kardes";
+  rol: "anne" | "baba" | "kardes" | "dede" | "anneanne" | "babaanne";
 }
 
 export function generateFamily(options?: {
@@ -87,7 +87,7 @@ export function generateFamily(options?: {
     soyisim,
     yas: anneYas,
     cinsiyet: "kadin",
-    meslek: randomItem(PROFESSIONS),
+    meslek: randomItem(PROFESSIONS.filter((p) => !["Öğrenci", "CEO", "Pilot"].includes(p)).slice(0, 40)),
     gelir: 0,
     ozellikler: generatePersonality(),
     rol: "anne",
@@ -99,7 +99,7 @@ export function generateFamily(options?: {
     soyisim,
     yas: babaYas,
     cinsiyet: "erkek",
-    meslek: randomItem(PROFESSIONS),
+    meslek: randomItem(PROFESSIONS.filter((p) => !["Öğrenci", "Ev Hanımı"].includes(p)).slice(0, 40)),
     gelir: 0,
     ozellikler: generatePersonality(),
     rol: "baba",
@@ -108,23 +108,61 @@ export function generateFamily(options?: {
 
   const members: GeneratedFamilyMember[] = [anne, baba];
 
+  // Büyükler (BitLife: grandparents)
+  if (Math.random() < 0.85) {
+    members.push({
+      isim: randomItem(TURKISH_NAMES.erkek),
+      soyisim,
+      yas: babaYas + randomInt(22, 32),
+      cinsiyet: "erkek",
+      meslek: "Emekli",
+      gelir: generateIncome("Emekli"),
+      ozellikler: generatePersonality(),
+      rol: "dede",
+    });
+  }
+  if (Math.random() < 0.85) {
+    members.push({
+      isim: randomItem(TURKISH_NAMES.kadin),
+      soyisim,
+      yas: anneYas + randomInt(20, 30),
+      cinsiyet: "kadin",
+      meslek: Math.random() < 0.5 ? "Emekli" : "Ev Hanımı",
+      gelir: generateIncome("Emekli"),
+      ozellikler: generatePersonality(),
+      rol: Math.random() < 0.5 ? "anneanne" : "babaanne",
+    });
+  }
+
   const kardesSayisi = options?.kardesSayisi ?? randomInt(0, 3);
+  const usedNames = new Set(members.map((m) => m.isim));
   for (let i = 0; i < kardesSayisi; i++) {
     const cinsiyet: Gender = Math.random() > 0.5 ? "erkek" : "kadin";
-    const kardes: GeneratedFamilyMember = {
-      isim: randomItem(TURKISH_NAMES[cinsiyet]),
+    let isim = randomItem(TURKISH_NAMES[cinsiyet]);
+    let guard = 0;
+    while (usedNames.has(isim) && guard < 20) {
+      isim = randomItem(TURKISH_NAMES[cinsiyet]);
+      guard++;
+    }
+    usedNames.add(isim);
+    const kardesYas = randomInt(1, Math.min(14, Math.max(1, anneYas - 18)));
+    members.push({
+      isim,
       soyisim,
-      yas: generateAgeForRole("kardes"),
+      yas: kardesYas,
       cinsiyet,
-      meslek: "Öğrenci",
+      meslek: kardesYas < 6 ? null as unknown as string : "Öğrenci",
       gelir: 0,
       ozellikler: generatePersonality(),
       rol: "kardes",
-    };
-    members.push(kardes);
+    });
   }
 
-  return members;
+  // Fix meslek null - use empty student
+  return members.map((m) => ({
+    ...m,
+    meslek: m.meslek || (m.yas < 18 ? "Öğrenci" : "İşsiz"),
+  }));
 }
 
 export function buildPersonalityFromFocus(

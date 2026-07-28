@@ -100,6 +100,7 @@ import {
   type Hobby,
 } from "@/lib/systems/hobbies";
 import { calculateLifeScore, submitScore } from "@/lib/systems/score";
+import { pickLifePrompt, familyYearlyNews, type LifePrompt } from "@/lib/systems/life-prompts";
 import { cityCostMultiplier } from "@/lib/systems/city-depth";
 
 interface GameState {
@@ -108,6 +109,8 @@ interface GameState {
   family: Character[];
   relationships: Relationship[];
   currentEvent: GameEvent | null;
+  currentPrompt: LifePrompt | null;
+  lifePromptHistory: string[];
   eventHistory: EventLog[];
   properties: Property[];
   investments: Investment[];
@@ -140,6 +143,7 @@ interface GameState {
   startNewLife: (options: CharacterCreationOptions, userId?: string) => void;
   advanceYear: () => void;
   selectChoice: (choiceId: string) => void;
+  resolvePrompt: (choiceId: string) => void;
   setActiveTab: (tab: GameTab) => void;
   relationshipAction: (targetId: string, action: string) => void;
   buyProperty: (property: Omit<Property, "id" | "lifeId">) => void;
@@ -229,6 +233,7 @@ function createCharacterFromFamily(
     sehir: CITIES[Math.floor(Math.random() * CITIES.length)],
     ulke: "Türkiye",
     isPlayer: false,
+    aileRolu: member.rol,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -277,6 +282,7 @@ function defaultExtras() {
     actionCooldowns: [] as ActionCooldown[],
     aileDurumu: "orta",
     lifetimeScore: 0,
+    lifePromptHistory: [],
   };
 }
 
@@ -286,6 +292,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   family: [],
   relationships: [],
   currentEvent: null,
+  currentPrompt: null,
+  lifePromptHistory: [],
   eventHistory: [],
   properties: [],
   investments: [],
@@ -328,12 +336,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         actionCooldowns: saved.actionCooldowns ?? [],
         aileDurumu: saved.aileDurumu ?? "orta",
         lifetimeScore: saved.lifetimeScore ?? 0,
+        lifePromptHistory: saved.lifePromptHistory ?? [],
         decorations: saved.decorations ?? [],
         currentEvent: getRandomEvent(
           ageGroup,
           saved.player.yas,
           (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik)
         ),
+        currentPrompt: null,
         notifications: [],
         npcMemories: [],
         activeTab: "hayat",
@@ -362,15 +372,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const familyChars = familyMembers.map((m) => {
       const char = createCharacterFromFamily(m, life.id, uid, baslangicYili);
-      return { ...char, sehir: options.sehir };
+      return { ...char, sehir: options.sehir, aileRolu: m.rol };
     });
 
-    const anne = familyChars.find((c) =>
-      familyMembers.find((m) => m.rol === "anne" && m.isim === c.isim)
-    );
-    const baba = familyChars.find((c) =>
-      familyMembers.find((m) => m.rol === "baba" && m.isim === c.isim)
-    );
+    const anne = familyChars.find((c) => c.aileRolu === "anne") ?? null;
+    const baba = familyChars.find((c) => c.aileRolu === "baba") ?? null;
 
     const { genetics, ozellikler: inheritedBits } = inheritGenetics(
       anne ?? null,
@@ -424,16 +430,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     };
 
     const relationships: Relationship[] = familyChars.map((member) => {
-      const memberData = familyMembers.find((m) => m.isim === member.isim);
-      const tip =
-        memberData?.rol === "anne" ? "anne" : memberData?.rol === "baba" ? "baba" : "kardes";
+      const tipMap: Record<string, Relationship["tip"]> = {
+        anne: "anne",
+        baba: "baba",
+        kardes: "kardes",
+        dede: "akraba",
+        anneanne: "akraba",
+        babaanne: "akraba",
+      };
+      const tip = tipMap[member.aileRolu ?? ""] ?? "akraba";
       return {
         id: createId(),
         lifeId: life.id,
         characterId: player.id,
         targetId: member.id,
-        tip: tip as Relationship["tip"],
-        puan: 70 + Math.floor(Math.random() * 20),
+        tip,
+        puan: tip === "anne" || tip === "baba" ? 80 + Math.floor(Math.random() * 15) : 65 + Math.floor(Math.random() * 20),
         romantik: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -458,6 +470,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       family: familyChars,
       relationships,
       currentEvent: getRandomEvent("bebek", 0),
+      currentPrompt: null,
+      lifePromptHistory: [],
       eventHistory: [],
       properties: [],
       investments: [],
@@ -466,7 +480,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       achievements: DEFAULT_ACHIEVEMENTS.map((a) => ({ ...a })),
       notifications: addNotification(
         [],
-        `Hoş geldin ${player.isim}! ${options.sehir}'de yeni bir hayat. Bebekken yatırım/para yönetimi yok.`
+        `Hoş geldin ${player.isim}! Ailen: ${familyChars.map((f) => f.isim).join(", ")}.`,
+        "yasam"
       ),
       npcMemories: [],
       decorations: [],
@@ -492,8 +507,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   advanceYear: () => {
     const state = get();
-    const { player, life, currentEvent, family, relationships, investments, loans } = state;
-    if (!player || !life || currentEvent || state.isDead) return;
+    const { player, life, currentEvent, currentPrompt, family, relationships, investments, loans } = state;
+    if (!player || !life || currentEvent || currentPrompt || state.isDead) return;
 
     const newYas = player.yas + 1;
     const newYil = life.mevcutYil + 1;
@@ -548,18 +563,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     let notifications = state.notifications;
+    let journal = state.journal;
     if (pocket > 0) {
       notifications = addNotification(notifications, `Bu yıl ${pocket} TL harçlık aldın.`);
     }
     if (newYas === 18) {
       notifications = addNotification(
         notifications,
-        "18 yaşına girdin. Yatırım, kredi ve ev alma artık mümkün."
+        "18 yaşına girdin. Yatırım, kredi ve ev alma artık mümkün.",
+        "yasam"
       );
     }
 
     let updatedMemories = state.npcMemories;
-    const updatedFamily = family.map((npc) => {
+    let updatedFamily = family.map((npc) => {
       if (npc.durum === "oldu") return { ...npc, yas: npc.yas + 1 };
       const result = simulateNpcYear(
         npc,
@@ -571,10 +588,42 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...result.memories,
       ];
       if (result.message) {
-        notifications = addNotification(notifications, result.message);
+        notifications = addNotification(notifications, result.message, "yasam");
       }
       return result.character;
     });
+
+    // Aile ilişkileri + haberler (BitLife)
+    const familyNews = familyYearlyNews(updatedFamily, relationships, newYil);
+    updatedFamily = familyNews.family;
+    let updatedRelationships = familyNews.relationships;
+    for (const msg of familyNews.messages) {
+      notifications = addNotification(notifications, msg, "yasam");
+    }
+
+    // Ebeveyn vefatında küçük miras
+    for (const f of updatedFamily) {
+      const wasAlive = family.find((x) => x.id === f.id);
+      if (wasAlive && wasAlive.durum === "yasiyor" && f.durum === "oldu") {
+        if (f.aileRolu === "anne" || f.aileRolu === "baba") {
+          const miras = 15000 + Math.floor(Math.random() * 40000);
+          updatedLife.para += miras;
+          notifications = addNotification(
+            notifications,
+            `${f.isim} vefat etti. Sana ${miras.toLocaleString("tr-TR")} TL miras kaldı.`,
+            "uyari"
+          );
+          journal = addJournal(
+            journal,
+            newYil,
+            newYas,
+            "Kayıp",
+            `${f.isim} (${f.aileRolu}) hayata veda etti.`,
+            "aile"
+          );
+        }
+      }
+    }
 
     // Yatırımlar sadece 18+ için fiyat güncellenir; çocuk portföyü olmamalı
     let updatedInvestments = investments;
@@ -619,7 +668,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     let crime = releaseIfDue(state.crime);
 
-    let journal = state.journal;
     if (newYas === 6) {
       journal = addJournal(journal, newYil, newYas, "Okul başladı", "İlkokul yılları başladı.", "egitim");
     }
@@ -663,9 +711,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     const avgRel =
-      relationships.length === 0
+      updatedRelationships.length === 0
         ? 50
-        : relationships.reduce((s, r) => s + r.puan, 0) / relationships.length;
+        : updatedRelationships.reduce((s, r) => s + r.puan, 0) / updatedRelationships.length;
     const score = calculateLifeScore({
       player: updatedPlayer,
       life: updatedLife,
@@ -689,10 +737,36 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     }
 
+    // BitLife tarzı: önce yaşam pop-up, yoksa rastgele olay — her yıl bir şey olur
+    let nextPrompt: LifePrompt | null = null;
+    let nextEvent: GameEvent | null = null;
+    let promptHistory = state.lifePromptHistory;
+
+    if (!dead) {
+      nextPrompt = pickLifePrompt({
+        player: updatedPlayer,
+        life: updatedLife,
+        properties: state.properties,
+        relationships: updatedRelationships,
+        family: updatedFamily,
+        aileDurumu: state.aileDurumu,
+        triggeredIds: promptHistory,
+      });
+      if (nextPrompt) {
+        promptHistory = [...promptHistory, nextPrompt.id].slice(-40);
+        notifications = addNotification(notifications, nextPrompt.baslik, "yasam");
+      } else {
+        nextEvent =
+          getRandomEvent(ageGroup, newYas, state.eventHistory.slice(0, 8).map((e) => e.baslik)) ??
+          getRandomEvent(ageGroup, newYas);
+      }
+    }
+
     set({
       player: updatedPlayer,
       life: updatedLife,
       family: updatedFamily,
+      relationships: updatedRelationships,
       investments: updatedInvestments,
       loans: updatedLoans,
       achievements: updatedAchievements,
@@ -702,17 +776,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       crime,
       journal,
       lifetimeScore: score.toplam,
-      currentEvent: dead
-        ? null
-        : getRandomEvent(
-            ageGroup,
-            newYas,
-            state.eventHistory.slice(0, 8).map((e) => e.baslik)
-          ),
+      currentEvent: nextEvent,
+      currentPrompt: nextPrompt,
+      lifePromptHistory: promptHistory,
       isDead: dead,
       notifications: dead
         ? addNotification(notifications, `${updatedPlayer.isim} ${updatedPlayer.yas} yaşında vefat etti.`, "uyari")
         : notifications,
+      activeTab: nextPrompt ? "hayat" : state.activeTab,
     });
 
     get().persist();
@@ -804,6 +875,103 @@ export const useGameStore = create<GameState>((set, get) => ({
       journal: updatedJournal,
     });
 
+    get().persist();
+  },
+
+  resolvePrompt: (choiceId) => {
+    const { player, life, currentPrompt, journal, notifications, eventHistory } = get();
+    if (!player || !life || !currentPrompt) return;
+
+    const choice = currentPrompt.secenekler.find((c) => c.id === choiceId);
+    if (!choice) return;
+
+    let updatedPlayer = { ...player };
+    let updatedLife = { ...life };
+
+    if (choice.etkiler) {
+      for (const effect of choice.etkiler) {
+        switch (effect.tip) {
+          case "mutluluk":
+            updatedPlayer.mutluluk = clamp(updatedPlayer.mutluluk + effect.deger);
+            break;
+          case "saglik":
+            updatedPlayer.saglik = clamp(updatedPlayer.saglik + effect.deger);
+            break;
+          case "stres":
+            updatedPlayer.stres = clamp(updatedPlayer.stres + effect.deger);
+            break;
+          case "para":
+            updatedLife.para += effect.deger;
+            break;
+          case "ozellik":
+            if (effect.ozellik) {
+              updatedPlayer.ozellikler = {
+                ...updatedPlayer.ozellikler,
+                [effect.ozellik]: clamp(updatedPlayer.ozellikler[effect.ozellik] + effect.deger),
+              };
+            }
+            break;
+        }
+      }
+    }
+
+    if (choice.eylem === "okula_git") {
+      updatedPlayer.egitim = "ilkokul";
+      updatedPlayer.meslek = "Öğrenci";
+    }
+    if (choice.eylem === "ise_basla") {
+      updatedPlayer.meslek = updatedPlayer.meslek === "Öğrenci" || !updatedPlayer.meslek ? "Satış Temsilcisi" : updatedPlayer.meslek;
+      updatedPlayer.gelir = calculateSalary(updatedPlayer.meslek, updatedPlayer.ozellikler.zeka, Math.max(0, player.yas - 18));
+    }
+    if (choice.eylem === "emekli_ol") {
+      updatedPlayer.meslek = "Emekli";
+      updatedPlayer.gelir = Math.max(8000, Math.round((updatedPlayer.gelir || 15000) * 0.55));
+    }
+    if (choice.eylem === "ehliyet") {
+      // sadece log
+    }
+
+    const log: EventLog = {
+      id: createId(),
+      lifeId: life.id,
+      yil: life.mevcutYil,
+      yas: player.yas,
+      baslik: currentPrompt.baslik,
+      aciklama: choice.sonuc,
+      kategori: "yasam",
+      createdAt: new Date().toISOString(),
+    };
+
+    const updatedJournal = addJournal(
+      journal,
+      life.mevcutYil,
+      player.yas,
+      currentPrompt.baslik,
+      choice.sonuc,
+      "yasam"
+    );
+
+    let nextNotifications = addNotification(notifications, choice.sonuc, "yasam");
+    let nextTab = get().activeTab;
+    if (choice.eylem === "ev_al_teklif") {
+      nextNotifications = addNotification(
+        nextNotifications,
+        "Mülk sekmesinden ev bakabilirsin. Gerçekçi fiyatlar şehirine göre değişir.",
+        "yasam"
+      );
+      nextTab = "mulk";
+    }
+
+    set({
+      player: updatedPlayer,
+      life: updatedLife,
+      currentPrompt: null,
+      currentEvent: null,
+      eventHistory: [log, ...eventHistory],
+      journal: updatedJournal,
+      notifications: nextNotifications,
+      activeTab: nextTab,
+    });
     get().persist();
   },
 
@@ -1471,6 +1639,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       actionCooldowns: saved.actionCooldowns ?? [],
       aileDurumu: saved.aileDurumu ?? "orta",
       lifetimeScore: saved.lifetimeScore ?? 0,
+      lifePromptHistory: saved.lifePromptHistory ?? [],
       decorations: saved.decorations ?? [],
       npcMemories: [],
       currentEvent: getRandomEvent(
@@ -1478,6 +1647,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         saved.player.yas,
         (saved.eventHistory ?? []).slice(0, 8).map((e) => e.baslik)
       ),
+      currentPrompt: null,
       notifications: [],
       activeTab: "hayat",
       isDead: saved.player.durum === "oldu",
@@ -1537,6 +1707,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       actionCooldowns: state.actionCooldowns,
       lifetimeScore: state.lifetimeScore,
       aileDurumu: state.aileDurumu,
+      lifePromptHistory: state.lifePromptHistory,
     };
 
     saveToLocal(saveData);

@@ -18,7 +18,8 @@ export function Notifications() {
             "flex items-start gap-3 rounded-card px-4 py-3 shadow-xl backdrop-blur-glass border animate-slide-up",
             n.tip === "basarim" && "bg-success/10 border-success/20",
             n.tip === "uyari" && "bg-warning/10 border-warning/20",
-            n.tip === "bilgi" && "bg-surface-overlay/80 border-border-subtle"
+            n.tip === "bilgi" && "bg-surface-overlay/80 border-border-subtle",
+            n.tip === "yasam" && "bg-accent/10 border-accent/25"
           )}
         >
           <p className="text-sm text-content flex-1">{n.mesaj}</p>

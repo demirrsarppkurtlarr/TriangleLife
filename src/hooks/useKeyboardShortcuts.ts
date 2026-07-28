@@ -6,6 +6,7 @@ import { useGameStore } from "@/store/game-store";
 export function useKeyboardShortcuts() {
   const advanceYear = useGameStore((s) => s.advanceYear);
   const currentEvent = useGameStore((s) => s.currentEvent);
+  const currentPrompt = useGameStore((s) => s.currentPrompt);
   const isDead = useGameStore((s) => s.isDead);
   const activeTab = useGameStore((s) => s.activeTab);
   const setActiveTab = useGameStore((s) => s.setActiveTab);
@@ -18,7 +19,7 @@ export function useKeyboardShortcuts() {
       switch (e.key) {
         case " ":
         case "Enter":
-          if (!currentEvent && !isDead && activeTab === "hayat") {
+          if (!currentEvent && !currentPrompt && !isDead && activeTab === "hayat") {
             e.preventDefault();
             advanceYear();
           }
@@ -61,5 +62,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [advanceYear, currentEvent, isDead, activeTab, setActiveTab, persist]);
+  }, [advanceYear, currentEvent, currentPrompt, isDead, activeTab, setActiveTab, persist]);
 }
