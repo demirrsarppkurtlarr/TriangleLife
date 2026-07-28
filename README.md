@@ -108,7 +108,7 @@ Supabase Dashboard → Authentication → Providers:
 | Runtime | Node |
 | Region | Frankfurt |
 | Branch | `main` |
-| Build Command | `npm install && npm run build` |
+| Build Command | `npm install --include=dev && npm run build` |
 | Start Command | `npm start` |
 | Health Check Path | `/api/health` |
 | Node Version | 20.18.0 (`NODE_VERSION`) |

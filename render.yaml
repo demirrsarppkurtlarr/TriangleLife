@@ -10,7 +10,7 @@
 #   NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon/public API anahtarı
 #                                   Settings → API → anon public
 #
-# Build:  npm install && npm run build
+# Build:  npm install --include=dev && npm run build
 # Start:  npm start  (PORT Render tarafından otomatik atanır)
 # Health: GET /api/health
 # ============================================================
@@ -23,7 +23,7 @@ services:
     plan: free
     branch: main
     rootDir: .
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
