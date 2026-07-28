@@ -43,6 +43,7 @@ export type GameTab =
   | "saglik"
   | "egitim"
   | "mulk"
+  | "sosyal"
   | "basarim";
 
 export interface PersonalityTraits {

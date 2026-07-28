@@ -4,14 +4,26 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useGameStore } from "@/store/game-store";
 import type { Gender } from "@/types/game";
+import { hasLocalSave } from "@/lib/local-storage";
 import { motion } from "framer-motion";
-import { Baby, Sparkles } from "lucide-react";
+import { Baby, Sparkles, Play } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function NewLifeScreen() {
   const startNewLife = useGameStore((s) => s.startNewLife);
+  const loadLocalGame = useGameStore((s) => s.loadLocalGame);
+  const [hasSave, setHasSave] = useState(false);
+
+  useEffect(() => {
+    setHasSave(hasLocalSave());
+  }, []);
 
   const handleStart = (cinsiyet: Gender) => {
     startNewLife(cinsiyet);
+  };
+
+  const handleContinue = () => {
+    loadLocalGame();
   };
 
   return (
@@ -20,7 +32,7 @@ export function NewLifeScreen() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="text-center space-y-8 max-w-lg"
+        className="text-center space-y-8 max-w-lg w-full"
       >
         <div className="space-y-4">
           <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-accent text-white">
@@ -33,6 +45,15 @@ export function NewLifeScreen() {
             Doğumdan ölüme kendi hayatını yaşa. Her seçim geleceğini şekillendirir.
           </p>
         </div>
+
+        {hasSave && (
+          <Card variant="elevated" padding="md" className="w-full">
+            <Button onClick={handleContinue} fullWidth className="gap-2" size="lg">
+              <Play size={20} />
+              Kayıtlı Oyuna Devam Et
+            </Button>
+          </Card>
+        )}
 
         <Card variant="elevated" padding="lg" className="w-full">
           <div className="space-y-4">
@@ -64,6 +85,10 @@ export function NewLifeScreen() {
             </div>
           </div>
         </Card>
+
+        <p className="text-xs text-content-muted">
+          Boşluk veya Enter: Yılı ilerlet · Ctrl+S: Kaydet · 1-8: Sekmeler
+        </p>
       </motion.div>
     </div>
   );

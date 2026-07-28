@@ -10,6 +10,7 @@ import {
   Trophy,
   Activity,
   Users,
+  PartyPopper,
 } from "lucide-react";
 
 const TABS: { id: GameTab; label: string; icon: typeof Heart }[] = [
@@ -19,6 +20,7 @@ const TABS: { id: GameTab; label: string; icon: typeof Heart }[] = [
   { id: "saglik", label: "Sağlık", icon: Activity },
   { id: "egitim", label: "Eğitim", icon: GraduationCap },
   { id: "mulk", label: "Mülk", icon: Home },
+  { id: "sosyal", label: "Sosyal", icon: PartyPopper },
   { id: "basarim", label: "Başarım", icon: Trophy },
 ];
 

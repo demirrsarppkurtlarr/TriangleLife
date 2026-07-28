@@ -14,6 +14,7 @@ export default function HomePage() {
   const player = useGameStore((s) => s.player);
   const isLoading = useGameStore((s) => s.isLoading);
   const loadGame = useGameStore((s) => s.loadGame);
+  const loadLocalGame = useGameStore((s) => s.loadLocalGame);
   const setUserId = useGameStore((s) => s.setUserId);
   const [triedLoad, setTriedLoad] = useState(false);
 
@@ -27,8 +28,12 @@ export default function HomePage() {
       }
     } else {
       setUserId(null);
+      if (!player && !triedLoad) {
+        setTriedLoad(true);
+        loadLocalGame();
+      }
     }
-  }, [user, authLoading, player, triedLoad, loadGame, setUserId]);
+  }, [user, authLoading, player, triedLoad, loadGame, loadLocalGame, setUserId]);
 
   if (authLoading || isLoading) {
     return (

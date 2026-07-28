@@ -1,6 +1,7 @@
 import type { GameEvent, AgeGroup, EventCategory } from "@/types/game";
+import { extraEvents } from "@/lib/events/events-extra";
 
-const events: GameEvent[] = [
+const baseEvents: GameEvent[] = [
   // Bebek olayları
   {
     id: "bebek-ilk-gun",
@@ -426,6 +427,8 @@ const events: GameEvent[] = [
     ],
   },
 ];
+
+const events: GameEvent[] = [...baseEvents, ...extraEvents];
 
 export function getEventsForAgeGroup(ageGroup: AgeGroup): GameEvent[] {
   return events.filter((e) => e.yasGrubu.includes(ageGroup));

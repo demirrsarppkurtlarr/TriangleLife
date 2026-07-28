@@ -25,6 +25,15 @@ import { applyRelationshipAction, simulateNpcLife } from "@/lib/systems/relation
 import { getEducationForAge, calculateSalary } from "@/lib/systems/career";
 import { DEFAULT_ACHIEVEMENTS, checkAchievements, getNewlyUnlocked } from "@/lib/systems/achievements";
 import { saveGameState, loadActiveLife, unlockAchievement } from "@/lib/supabase/game-service";
+import { saveToLocal, loadFromLocal, clearLocalSave } from "@/lib/local-storage";
+import { SOCIAL_ACTIVITIES } from "@/lib/systems/social";
+import { calculateTax } from "@/lib/systems/finance";
+import {
+  createSpouse,
+  createChild,
+  createSpouseRelationship,
+  createChildRelationship,
+} from "@/lib/systems/npc-lifecycle";
 
 interface GameState {
   life: Life | null;
@@ -61,6 +70,10 @@ interface GameState {
   study: (seviye: EducationLevel) => void;
   findJob: (meslek: string) => void;
   continueAsChild: (childId: string) => void;
+  socialActivity: (activityId: string) => void;
+  payTax: () => void;
+  hireEmployee: (companyId: string) => void;
+  loadLocalGame: () => boolean;
   dismissNotification: (id: string) => void;
   resetGame: () => void;
   persist: () => Promise<void>;
@@ -460,23 +473,51 @@ export const useGameStore = create<GameState>((set, get) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   relationshipAction: (targetId, action) => {
-    const { relationships, player, notifications } = get();
-    if (!player) return;
+    const { relationships, player, life, family, notifications } = get();
+    if (!player || !life) return;
 
     const rel = relationships.find((r) => r.targetId === targetId);
     if (!rel) return;
 
     const result = applyRelationshipAction(rel, action);
-    const updated = relationships.map((r) =>
-      r.id === rel.id ? { ...r, puan: result.puan, romantik: action === "sevgili" || action === "evlilik" ? true : r.romantik } : r
+    let updatedRels = relationships.map((r) =>
+      r.id === rel.id
+        ? {
+            ...r,
+            puan: result.puan,
+            tip: action === "evlilik" ? "es" as const : action === "sevgili" ? "sevgili" as const : r.tip,
+            romantik: action === "sevgili" || action === "evlilik" || r.romantik,
+          }
+        : r
     );
 
+    let updatedFamily = [...family];
     let updatedPlayer = { ...player, mutluluk: clamp(player.mutluluk + (result.puan - rel.puan) * 0.1) };
+    let newNotifications = addNotification(notifications, result.mesaj);
+
+    if (action === "evlilik" && player.yas >= 18) {
+      const spouse = createSpouse(player, life);
+      const spouseRel = createSpouseRelationship(player, spouse, life);
+      updatedFamily.push(spouse);
+      updatedRels.push(spouseRel);
+      updatedPlayer = { ...updatedPlayer, esId: spouse.id };
+      newNotifications = addNotification(newNotifications, `${spouse.isim} ile evlendin!`, "basarim");
+    }
+
+    if (action === "cocuk" && player.yas >= 18) {
+      const spouse = updatedFamily.find((f) => f.id === player.esId);
+      const child = createChild(player, spouse ?? null, life);
+      const childRel = createChildRelationship(player, child, life);
+      updatedFamily.push(child);
+      updatedRels.push(childRel);
+      newNotifications = addNotification(newNotifications, `${child.isim} doğdu!`, "basarim");
+    }
 
     set({
-      relationships: updated,
+      relationships: updatedRels,
+      family: updatedFamily,
       player: updatedPlayer,
-      notifications: addNotification(notifications, result.mesaj),
+      notifications: newNotifications,
     });
     get().persist();
   },
@@ -691,7 +732,95 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ notifications: get().notifications.filter((n) => n.id !== id) });
   },
 
+  socialActivity: (activityId) => {
+    const { player, life, notifications } = get();
+    if (!player || !life) return;
+
+    const activity = SOCIAL_ACTIVITIES.find((a) => a.id === activityId);
+    if (!activity || player.yas < activity.minYas) return;
+
+    if (life.para < activity.maliyet) {
+      set({ notifications: addNotification(notifications, "Yeterli paranız yok.", "uyari") });
+      return;
+    }
+
+    set({
+      player: {
+        ...player,
+        mutluluk: clamp(player.mutluluk + activity.mutluluk),
+        ozellikler: {
+          ...player.ozellikler,
+          sosyallik: clamp(player.ozellikler.sosyallik + activity.sosyallik),
+        },
+      },
+      life: { ...life, para: life.para - activity.maliyet },
+      notifications: addNotification(notifications, activity.aciklama),
+    });
+    get().persist();
+  },
+
+  payTax: () => {
+    const { player, life, notifications } = get();
+    if (!player || !life || !player.gelir) return;
+
+    const tax = calculateTax(player.gelir * 12);
+    if (life.para < tax) {
+      set({ notifications: addNotification(notifications, "Vergi ödemek için yeterli para yok.", "uyari") });
+      return;
+    }
+
+    set({
+      life: { ...life, para: life.para - tax },
+      notifications: addNotification(notifications, `${tax.toLocaleString("tr-TR")} TL vergi ödendi.`),
+    });
+    get().persist();
+  },
+
+  hireEmployee: (companyId) => {
+    const { companies, life, notifications } = get();
+    if (!life) return;
+
+    const company = companies.find((c) => c.id === companyId);
+    if (!company) return;
+
+    const maliyet = 5000;
+    if (life.para < maliyet) {
+      set({ notifications: addNotification(notifications, "Çalışan almak için 5.000 TL gerekli.", "uyari") });
+      return;
+    }
+
+    const updated = companies.map((c) =>
+      c.id === companyId
+        ? { ...c, calisanSayisi: c.calisanSayisi + 1, gelir: c.gelir + 3000 }
+        : c
+    );
+
+    set({
+      companies: updated,
+      life: { ...life, para: life.para - maliyet },
+      notifications: addNotification(notifications, `${company.ad} şirketine yeni çalışan alındı.`),
+    });
+    get().persist();
+  },
+
+  loadLocalGame: () => {
+    const saved = loadFromLocal();
+    if (!saved) return false;
+
+    const ageGroup = getAgeGroup(saved.player.yas);
+    set({
+      ...saved,
+      currentEvent: getRandomEvent(ageGroup),
+      notifications: [],
+      activeTab: "hayat",
+      isDead: saved.player.durum === "oldu",
+      isLoading: false,
+    });
+    return true;
+  },
+
   resetGame: () => {
+    clearLocalSave();
     set({
       life: null,
       player: null,
@@ -715,8 +844,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get();
     if (!state.life || !state.player) return;
 
-    set({ isSaving: true });
-    const { error } = await saveGameState({
+    const saveData = {
       life: state.life,
       player: state.player,
       family: state.family,
@@ -727,8 +855,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       companies: state.companies,
       loans: state.loans,
       achievements: state.achievements,
-    });
-    set({ isSaving: false, error: error ?? null });
+    };
+
+    saveToLocal(saveData);
+
+    if (state.userId && state.userId !== "local-user") {
+      set({ isSaving: true });
+      const { error } = await saveGameState(saveData);
+      set({ isSaving: false, error: error ?? null });
+    }
   },
 }));
 

@@ -12,8 +12,10 @@ import { EducationPanel } from "@/components/game/EducationPanel";
 import { PropertyPanel } from "@/components/game/PropertyPanel";
 import { HealthPanel } from "@/components/game/HealthPanel";
 import { AchievementsPanel } from "@/components/game/AchievementsPanel";
+import { SocialPanel } from "@/components/game/SocialPanel";
 import { DeathScreen } from "@/components/game/DeathScreen";
 import { Notifications } from "@/components/game/Notifications";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useGameStore } from "@/store/game-store";
 import { Calendar, LogOut, Save } from "lucide-react";
 
@@ -34,6 +36,8 @@ export function GameScreen() {
     resetGame,
     persist,
   } = useGameStore();
+
+  useKeyboardShortcuts();
 
   if (!player || !life) return null;
 
@@ -116,6 +120,7 @@ export function GameScreen() {
       {activeTab === "saglik" && <HealthPanel />}
       {activeTab === "egitim" && <EducationPanel />}
       {activeTab === "mulk" && <PropertyPanel />}
+      {activeTab === "sosyal" && <SocialPanel />}
       {activeTab === "basarim" && <AchievementsPanel />}
     </div>
   );

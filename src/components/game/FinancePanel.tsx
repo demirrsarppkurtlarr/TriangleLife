@@ -9,7 +9,7 @@ import { INVESTMENT_SYMBOLS } from "@/store/game-store";
 import { Wallet, TrendingUp, Building2, CreditCard } from "lucide-react";
 
 export function FinancePanel() {
-  const { life, investments, companies, loans, buyInvestment, takeLoan, startCompany } =
+  const { life, investments, companies, loans, buyInvestment, takeLoan, startCompany, payTax, hireEmployee } =
     useGameStore();
 
   if (!life) return null;
@@ -140,12 +140,26 @@ export function FinancePanel() {
           <div className="mt-3 space-y-2">
             {companies.map((c) => (
               <div key={c.id} className="rounded-button bg-surface-overlay/40 px-3 py-2">
-                <p className="font-medium text-content">{c.ad}</p>
-                <p className="text-xs text-content-muted">{c.sektor} · {c.calisanSayisi} çalışan</p>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-medium text-content">{c.ad}</p>
+                    <p className="text-xs text-content-muted">{c.sektor} · {c.calisanSayisi} çalışan</p>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={() => hireEmployee(c.id)}>
+                    Çalışan Al
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         )}
+      </Card>
+
+      <Card variant="glass" padding="md">
+        <h3 className="font-display text-lg font-semibold text-content mb-3">Vergi</h3>
+        <Button variant="secondary" onClick={payTax} className="w-full">
+          Yıllık Vergiyi Öde
+        </Button>
       </Card>
     </div>
   );
