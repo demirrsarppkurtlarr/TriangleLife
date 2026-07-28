@@ -75,6 +75,14 @@ export function getPocketMoney(yas: number, aileDurumu?: string): number {
   return 0;
 }
 
+export function canGamble(yas: number): boolean {
+  return yas >= 18;
+}
+
+export function canDoSideGig(yas: number): boolean {
+  return yas >= 14;
+}
+
 export function getAgeBlockedMessage(yas: number, feature: string): string {
   const map: Record<string, { min: number; label: string }> = {
     finans: { min: 16, label: "Finans işlemleri" },
@@ -86,6 +94,8 @@ export function getAgeBlockedMessage(yas: number, feature: string): string {
     is: { min: 15, label: "İş bulma" },
     oy: { min: 18, label: "Oy kullanma" },
     bar: { min: 18, label: "Bar" },
+    kumar: { min: 18, label: "Kumar / piyango" },
+    ek_is: { min: 14, label: "Ek iş" },
   };
   const item = map[feature];
   if (!item) return "Bu işlem için uygun yaşta değilsin.";

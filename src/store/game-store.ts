@@ -57,6 +57,8 @@ import {
   canStudyUniversity,
   getPocketMoney,
   getAgeBlockedMessage,
+  canGamble,
+  canDoSideGig,
 } from "@/lib/systems/age-gates";
 import { inheritGenetics, type GeneticsProfile } from "@/lib/systems/genetics";
 import {
@@ -102,6 +104,18 @@ import {
 import { calculateLifeScore, submitScore } from "@/lib/systems/score";
 import { pickLifePrompt, familyYearlyNews, type LifePrompt } from "@/lib/systems/life-prompts";
 import { cityCostMultiplier } from "@/lib/systems/city-depth";
+import {
+  MONEY_GIGS,
+  GAMBLE_GAMES,
+  rollGigEarnings,
+  resolveGamble,
+} from "@/lib/systems/money-makers";
+
+interface GigCooldown {
+  gigId: string;
+  yil: number;
+  sayac: number;
+}
 
 interface GameState {
   life: Life | null;
@@ -129,6 +143,7 @@ interface GameState {
   hobbies: Hobby[];
   genetics: GeneticsProfile | null;
   actionCooldowns: ActionCooldown[];
+  gigCooldowns: GigCooldown[];
   aileDurumu: string;
   lifetimeScore: number;
   activeTab: GameTab;
@@ -158,6 +173,8 @@ interface GameState {
   payTax: () => void;
   hireEmployee: (companyId: string) => void;
   buyDecoration: (decorationId: string) => void;
+  doGig: (gigId: string) => void;
+  gamble: (gameId: string, bahis: number) => void;
   helpNeighbor: (neighborId: string) => void;
   schoolStudy: (hard: boolean) => void;
   attemptCrimeAction: (crimeId: string) => void;
@@ -280,6 +297,7 @@ function defaultExtras() {
     hobbies: [] as Hobby[],
     genetics: null as GeneticsProfile | null,
     actionCooldowns: [] as ActionCooldown[],
+    gigCooldowns: [] as GigCooldown[],
     aileDurumu: "orta",
     lifetimeScore: 0,
     lifePromptHistory: [],
@@ -494,6 +512,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       hobbies: [],
       genetics,
       actionCooldowns: [],
+      gigCooldowns: [],
       aileDurumu: options.aileDurumu,
       lifetimeScore: 0,
       activeTab: "hayat",
@@ -1463,6 +1482,124 @@ export const useGameStore = create<GameState>((set, get) => ({
       decorations: [...decorations, item.id],
       player: { ...player, mutluluk: clamp(player.mutluluk + item.mutluluk) },
       notifications: addNotification(notifications, item.aciklama),
+    });
+    get().persist();
+  },
+
+  doGig: (gigId) => {
+    const { player, life, properties, notifications, gigCooldowns: rawCd } = get();
+    if (!player || !life) return;
+    const gigCooldowns = rawCd ?? [];
+    if (!canDoSideGig(player.yas)) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "ek_is"), "uyari") });
+      return;
+    }
+
+    const gig = MONEY_GIGS.find((g) => g.id === gigId);
+    if (!gig) return;
+    if (player.yas < gig.minYas || (gig.maxYas !== undefined && player.yas > gig.maxYas)) {
+      set({ notifications: addNotification(notifications, "Bu iş için yaşın uygun değil.", "uyari") });
+      return;
+    }
+
+    const cd = gigCooldowns.find((c) => c.gigId === gigId);
+    if (cd && cd.yil === life.mevcutYil && cd.sayac >= gig.maxPerYear) {
+      set({
+        notifications: addNotification(
+          notifications,
+          `Bu yıl "${gig.ad}" limitine ulaştın (${gig.maxPerYear}x).`,
+          "uyari"
+        ),
+      });
+      return;
+    }
+    if (life.para < gig.maliyet) {
+      set({ notifications: addNotification(notifications, "Başlangıç maliyeti için paran yetmiyor.", "uyari") });
+      return;
+    }
+
+    const hasHome = properties.some((p) => p.tip === "ev" && p.satinAlindi);
+    const result = rollGigEarnings(
+      gig,
+      player.ozellikler.zeka,
+      player.ozellikler.sosyallik,
+      hasHome,
+      life.bankaBakiyesi,
+      player.gelir
+    );
+
+    if (result.kazanc === 0 && gig.id !== "bagis-topla" && !result.mesaj.includes("TL")) {
+      set({ notifications: addNotification(notifications, result.mesaj, "uyari") });
+      return;
+    }
+
+    let updatedCooldowns = [...gigCooldowns];
+    if (!cd) {
+      updatedCooldowns.push({ gigId, yil: life.mevcutYil, sayac: 1 });
+    } else if (cd.yil === life.mevcutYil) {
+      updatedCooldowns = updatedCooldowns.map((c) =>
+        c.gigId === gigId ? { ...c, sayac: c.sayac + 1 } : c
+      );
+    } else {
+      updatedCooldowns = updatedCooldowns.map((c) =>
+        c.gigId === gigId ? { ...c, yil: life.mevcutYil, sayac: 1 } : c
+      );
+    }
+
+    const mutlulukDelta = gig.id === "bagis-topla" ? 6 : result.kazanc > 5000 ? 3 : result.kazanc > 0 ? 1 : -1;
+
+    set({
+      life: { ...life, para: life.para + result.kazanc },
+      player: {
+        ...player,
+        stres: clamp(player.stres + gig.stres),
+        saglik: clamp(player.saglik + (gig.saglik ?? 0)),
+        mutluluk: clamp(player.mutluluk + mutlulukDelta),
+      },
+      gigCooldowns: updatedCooldowns,
+      notifications: addNotification(notifications, result.mesaj),
+    });
+    get().persist();
+  },
+
+  gamble: (gameId, bahis) => {
+    const { player, life, notifications } = get();
+    if (!player || !life) return;
+
+    const game = GAMBLE_GAMES.find((g) => g.id === gameId);
+    if (!game) return;
+    if (player.yas < game.minYas) {
+      set({
+        notifications: addNotification(
+          notifications,
+          game.minYas >= 21
+            ? "Bu oyun için en az 21 yaşında olmalısın."
+            : getAgeBlockedMessage(player.yas, "kumar"),
+          "uyari"
+        ),
+      });
+      return;
+    }
+    if (!canGamble(player.yas) && game.minYas >= 18) {
+      set({ notifications: addNotification(notifications, getAgeBlockedMessage(player.yas, "kumar"), "uyari") });
+      return;
+    }
+
+    const bet = Math.max(game.minBahis, Math.min(game.maxBahis, bahis));
+    if (life.para < bet) {
+      set({ notifications: addNotification(notifications, "Bahis için yeterli paran yok.", "uyari") });
+      return;
+    }
+
+    const result = resolveGamble(game, bet, player.ozellikler.zeka);
+    set({
+      life: { ...life, para: life.para + result.net },
+      player: {
+        ...player,
+        stres: clamp(player.stres + (result.kazandi ? 2 : 5)),
+        mutluluk: clamp(player.mutluluk + (result.kazandi ? 4 : -3)),
+      },
+      notifications: addNotification(notifications, result.mesaj, result.kazandi ? "bilgi" : "uyari"),
     });
     get().persist();
   },
