@@ -661,13 +661,13 @@ INSERT INTO achievements (kod, ad, aciklama, ikon) VALUES
   ('ev_sahibi', 'Ev Sahibi', 'Kendi evini satın aldın.', 'home'),
   ('evli', 'Evli', 'Evlendin.', 'heart'),
   ('ebeveyn', 'Ebeveyn', 'İlk çocuğun doğdu.', 'family'),
-  ('ceo', 'CEO', 'Kendi şirketinin CEO\'su oldun.', 'building'),
+  ('ceo', 'CEO', 'Kendi şirketinin CEO''su oldun.', 'building'),
   ('yatirimci', 'Yatırımcı', 'İlk yatırımını yaptın.', 'chart'),
-  ('saglikli', 'Sağlıklı Yaşam', 'Sağlık puanın 90\'a ulaştı.', 'health'),
-  ('mutlu', 'Mutlu Hayat', 'Mutluluk puanın 90\'a ulaştı.', 'smile'),
+  ('saglikli', 'Sağlıklı Yaşam', 'Sağlık puanın 90''a ulaştı.', 'health'),
+  ('mutlu', 'Mutlu Hayat', 'Mutluluk puanın 90''a ulaştı.', 'smile'),
   ('uzun_yasam', 'Uzun Yaşam', '80 yaşına ulaştın.', 'clock'),
-  ('bilge', 'Bilge', 'Zeka puanın 90\'a ulaştı.', 'brain'),
-  ('sosyal', 'Sosyal Kelebek', 'Sosyallik puanın 90\'a ulaştı.', 'users');
+  ('bilge', 'Bilge', 'Zeka puanın 90''a ulaştı.', 'brain'),
+  ('sosyal', 'Sosyal Kelebek', 'Sosyallik puanın 90''a ulaştı.', 'users');
 
 -- ============================================================
 -- FONKSİYON: Yaş grubu hesaplama
